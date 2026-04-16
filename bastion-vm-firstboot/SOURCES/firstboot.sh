@@ -50,7 +50,7 @@ brew update
 FAILED=()
 BREWFILE=/usr/share/bastion-vm-firstboot/Brewfile
 log "Running brew bundle --file=$BREWFILE"
-if brew bundle --file="$BREWFILE" --no-lock; then
+if brew bundle --file="$BREWFILE"; then
     log "brew bundle OK"
 else
     log "ERROR: brew bundle reported failures"
@@ -58,9 +58,13 @@ else
 fi
 
 # ── Yarn v4 Berry via corepack ────────────────────────────────────────────────
-# corepack ships with Node.js; 'enable' installs yarn/pnpm shims system-wide
-# (needs root — user has NOPASSWD:ALL). 'prepare yarn@stable' downloads v4
-# Berry and makes it the global default; runs as user into corepack's cache.
+# Fedora's nodejs RPM no longer ships corepack, so install it globally via npm
+# first, then enable (needs root — user has NOPASSWD:ALL). 'prepare yarn@stable'
+# downloads v4 Berry and makes it the global default.
+log "Installing corepack (npm global — Fedora nodejs RPM no longer ships it)"
+if ! command -v corepack &>/dev/null; then
+    sudo npm install -g corepack || { log "ERROR: npm install -g corepack failed"; FAILED+=("npm:corepack"); }
+fi
 log "Enabling corepack (yarn/pnpm shims)"
 if sudo corepack enable; then
     log "Preparing Yarn v4 Berry"
