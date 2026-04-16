@@ -68,13 +68,13 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
 check: check-versions
 	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
-	@python3 -c "import tomllib; tomllib.load(open('$(BLUEPRINT)', 'rb'))" && echo "blueprint.toml: OK"
+	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
 ## check-versions: assert RPM spec Version and blueprint version match
 check-versions:
 	@spec_ver=$$(sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE)); \
-	 bp_ver=$$(python3 -c "import tomllib; print(tomllib.load(open('$(BLUEPRINT)','rb'))['version'])"); \
+	 bp_ver=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
 	 if [ "$$spec_ver" != "$$bp_ver" ]; then \
 	     echo "ERROR: version mismatch — spec=$$spec_ver blueprint=$$bp_ver"; exit 1; \
 	 else \
@@ -93,7 +93,7 @@ lint: $(RPM)
 ## validate: check blueprint syntax, SSH key, and target image type
 validate: $(BLUEPRINT_EFFECTIVE)
 	@echo "Checking TOML syntax..."
-	@python3 -c "import tomllib; tomllib.load(open('$(BLUEPRINT_EFFECTIVE)', 'rb'))" && echo "  OK"
+	@yq -p toml -oy '.' $(BLUEPRINT_EFFECTIVE) >/dev/null && echo "  OK"
 	@echo "Checking SSH key placeholder..."
 	@! grep -q 'CHANGEME' $(BLUEPRINT_EFFECTIVE) && echo "  OK" || \
 		{ echo "  ERROR: SSH key not substituted in blueprint.effective.toml"; exit 1; }
