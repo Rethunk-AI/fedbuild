@@ -16,6 +16,10 @@ set -euo pipefail
 log() { echo "[firstboot] $(date -Iseconds) $*"; }
 log "Starting"
 
+# ── Environment (profile.d not sourced by systemd) ────────────────────────────
+export NPM_CONFIG_PREFIX="${HOME}/.npm-global"
+export PATH="${HOME}/.npm-global/bin:${PATH}"
+
 # ── Homebrew ──────────────────────────────────────────────────────────────────
 if ! command -v brew &>/dev/null; then
     log "Installing Homebrew"
