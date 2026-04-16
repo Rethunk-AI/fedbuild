@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(make *)",
+      "Bash(brew *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(go *)",
+      "Bash(uv *)",
+      "Bash(python3 *)",
+      "Bash(bun *)",
+      "Bash(yarn *)",
+      "Bash(rg *)",
+      "Bash(fd *)",
+      "Bash(curl *)",
+      "Bash(sudo *)",
+      "Bash(podman *)",
+      "Bash(kubectl *)",
+      "Bash(helm *)",
+      "Bash(semgrep *)",
+      "Bash(actionlint *)",
+      "Bash(shellcheck *)",
+      "Bash(buf *)",
+      "Bash(stripe *)",
+      "Bash(supabase *)"
+    ]
+  }
+}

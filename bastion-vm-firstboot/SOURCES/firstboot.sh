@@ -120,78 +120,8 @@ mkdir -p ~/go/bin
 # ── Claude Code agent configuration ───────────────────────────────────────────
 log "Writing Claude Code agent configuration"
 mkdir -p ~/.claude
-
-cat > ~/.claude/CLAUDE.md << 'CLAUDEMD'
-# Bastion Agent
-
-Coding agent running in an isolated Fedora 43 VM (fedbuild).
-
-## Environment
-
-- Sudo: passwordless (`NOPASSWD: ALL`) — VM is sandboxed, intentional
-- Network: outbound only; no inbound exposure
-
-## Tools
-
-Installed via RPM / Homebrew / npm — use these, don't install ad-hoc:
-
-| Category | Tools |
-|----------|-------|
-| VCS | git, gh |
-| Runtimes | go, node, bun, yarn, uv (Python) |
-| Search | rg, fd, tokei |
-| Containers | podman, kubectl, helm |
-| AI CLIs | claude, gemini |
-| Linters | shellcheck, actionlint, semgrep, buf |
-| Cloud | stripe, supabase, cloudflared |
-
-## Git Identity
-
-`/etc/gitconfig`: `Bastion Agent <bastion-agent@rethunk.tech>` — override per-repo:
-`git config user.name "..." && git config user.email "..."`
-
-## Defaults
-
-- Editor: nvim; Pager: less
-- Python: uv (not pip/poetry)
-- Prefer `rg` over grep, `fd` over find
-- Commit early and often; conventional commits (`type(scope): subject`)
-CLAUDEMD
-
-cat > ~/.claude/settings.json << 'SETTINGS'
-{
-  "permissions": {
-    "allow": [
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(make *)",
-      "Bash(brew *)",
-      "Bash(npm *)",
-      "Bash(npx *)",
-      "Bash(node *)",
-      "Bash(go *)",
-      "Bash(uv *)",
-      "Bash(python3 *)",
-      "Bash(bun *)",
-      "Bash(yarn *)",
-      "Bash(rg *)",
-      "Bash(fd *)",
-      "Bash(curl *)",
-      "Bash(sudo *)",
-      "Bash(podman *)",
-      "Bash(kubectl *)",
-      "Bash(helm *)",
-      "Bash(semgrep *)",
-      "Bash(actionlint *)",
-      "Bash(shellcheck *)",
-      "Bash(buf *)",
-      "Bash(stripe *)",
-      "Bash(supabase *)"
-    ]
-  }
-}
-SETTINGS
-
+cp /usr/share/bastion-vm-firstboot/agent-claude.md ~/.claude/CLAUDE.md
+cp /usr/share/bastion-vm-firstboot/agent-settings.json ~/.claude/settings.json
 log "Claude Code configuration written to ~/.claude/"
 
 if [[ ${#FAILED[@]} -gt 0 ]]; then

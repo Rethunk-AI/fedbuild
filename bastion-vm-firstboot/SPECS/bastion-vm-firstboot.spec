@@ -14,6 +14,8 @@ Source0:        firstboot.sh
 Source1:        bastion-vm-firstboot.service
 Source2:        devbox-profile.sh
 Source3:        user-sudoers
+Source4:        agent-claude.md
+Source5:        agent-settings.json
 
 %description
 Runs once on first boot (as the 'user' account) to install Homebrew
@@ -37,6 +39,8 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_unitdir}/%{name}.service
 install -Dm644 %{SOURCE2} %{buildroot}%{_sysconfdir}/profile.d/devbox.sh
 install -Dm440 %{SOURCE3} %{buildroot}%{_sysconfdir}/sudoers.d/user
 install -d %{buildroot}%{_localstatedir}/lib/%{name}
+install -Dm644 %{SOURCE4} %{buildroot}%{_datadir}/%{name}/agent-claude.md
+install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 
 %post
 %systemd_post %{name}.service
@@ -54,6 +58,9 @@ install -d %{buildroot}%{_localstatedir}/lib/%{name}
 %{_unitdir}/%{name}.service
 %{_sysconfdir}/profile.d/devbox.sh
 %{_sysconfdir}/sudoers.d/user
+%dir %{_datadir}/%{name}
+%{_datadir}/%{name}/agent-claude.md
+%{_datadir}/%{name}/agent-settings.json
 
 %changelog
 * Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.2.0-1
