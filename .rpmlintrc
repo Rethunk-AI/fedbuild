@@ -1,0 +1,26 @@
+# rpmlint 2.x configuration for bastion-vm-firstboot
+# Suppresses known-good false positives for this internal packaging style.
+
+Filters = [
+    # Tech terms in %description are not typos
+    '.*spelling-error.*',
+
+    # /var/lib/bastion-vm-firstboot is owned by 'user' (the VM's coding-agent
+    # account) so the firstboot service can write its done sentinel without sudo
+    '.*non-standard-uid.*/var/lib/bastion-vm-firstboot.*user',
+    '.*non-standard-gid.*/var/lib/bastion-vm-firstboot.*user',
+
+    # sudoers(5) requires mode 440; rpmlint flags it as non-readable
+    '.*non-readable.*/etc/sudoers\.d/user.*440',
+
+    # These files are installed by the package and not user-editable config;
+    # declaring them as %config would imply rpm should merge user edits on upgrade
+    '.*non-conffile-in-etc.*/etc/profile\.d/devbox\.sh',
+    '.*non-conffile-in-etc.*/etc/sudoers\.d/user',
+
+    # Internal package — no upstream URL
+    '.*no-url-tag.*',
+
+    # Firstboot script; no man page needed
+    '.*no-documentation.*',
+]

@@ -71,7 +71,7 @@ shellcheck:
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
 	@rpm -q rpmlint >/dev/null 2>&1 || sudo dnf install -y rpmlint
-	rpmlint $(RPM)
+	rpmlint --config $(FEDBUILD)/.rpmlintrc --ignore-unused-rpmlintrc $(RPM)
 
 ## validate: check blueprint syntax, SSH key, and target image type
 validate: $(BLUEPRINT_EFFECTIVE)
