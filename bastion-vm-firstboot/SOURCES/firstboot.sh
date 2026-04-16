@@ -13,7 +13,18 @@
 # AI CLI tools (claude, gemini) installed via npm — no signed RPM repo exists.
 set -euo pipefail
 
+SENTINEL_DIR=/var/lib/bastion-vm-firstboot
 log() { echo "[firstboot] $(date -Iseconds) $*"; }
+
+on_exit() {
+    local rc=$?
+    if [[ $rc -ne 0 ]]; then
+        log "FAILED (exit $rc) — writing failure sentinel"
+        touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
+    fi
+}
+trap on_exit EXIT
+
 log "Starting"
 
 # ── Environment (profile.d not sourced by systemd) ────────────────────────────
@@ -68,10 +79,16 @@ brew_install supabase/tap/supabase
 # (needs root — user has NOPASSWD:ALL). 'prepare yarn@stable' downloads v4
 # Berry and makes it the global default; runs as user into corepack's cache.
 log "Enabling corepack (yarn/pnpm shims)"
-sudo corepack enable
-log "Preparing Yarn v4 Berry"
-corepack prepare yarn@stable --activate
-log "Yarn $(yarn --version) active"
+if sudo corepack enable; then
+    log "Preparing Yarn v4 Berry"
+    if corepack prepare yarn@stable --activate; then
+        log "Yarn $(yarn --version) active"
+    else
+        log "WARNING: corepack prepare yarn@stable failed — continuing"
+    fi
+else
+    log "WARNING: corepack enable failed — continuing"
+fi
 
 # ── npm globals — AI CLI tools with no signed RPM repo ────────────────────────
 npm_install_global() {
