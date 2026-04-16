@@ -6,3 +6,4 @@ fedora-43-minimal-raw-zst-x86_64/
 keys/
 blueprint.effective.toml
 .remember/
+.claude/settings.local.json
