@@ -70,23 +70,28 @@ done
 log "SSH up"
 
 # ── Wait for firstboot sentinel ───────────────────────────────────────────────
+# Polls both 'done' (success) and 'failed' (error) so a broken firstboot
+# aborts the smoke test in seconds instead of waiting out TIMEOUT_FIRSTBOOT.
 log "Waiting for firstboot sentinel (up to ${TIMEOUT_FIRSTBOOT}s)"
 deadline=$(( $(date +%s) + TIMEOUT_FIRSTBOOT ))
-until ssh "${SSH_OPTS[@]}" "test -f /var/lib/bastion-vm-firstboot/done" 2>/dev/null; do
+while :; do
+    state=$(ssh "${SSH_OPTS[@]}" '
+        if [ -f /var/lib/bastion-vm-firstboot/failed ]; then echo failed
+        elif [ -f /var/lib/bastion-vm-firstboot/done ]; then echo done
+        else echo waiting
+        fi' 2>/dev/null || echo waiting)
+    case "$state" in
+        done) log "firstboot done"; break ;;
+        failed)
+            log "Dumping firstboot journal for diagnostics:"
+            ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
+            die "firstboot failed sentinel present — see journal above"
+            ;;
+    esac
     (( $(date +%s) < deadline )) || die "firstboot did not complete within ${TIMEOUT_FIRSTBOOT}s"
     sleep 15
     log "  still waiting..."
 done
-log "firstboot done"
-
-# Check for failure sentinel — belt-and-suspenders; firstboot should have
-# exited non-zero before writing done if any installs failed, but guard here
-# too in case of legacy images or unexpected race conditions.
-if ssh "${SSH_OPTS[@]}" "test -f /var/lib/bastion-vm-firstboot/failed" 2>/dev/null; then
-    log "Dumping firstboot journal for diagnostics:"
-    ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
-    die "firstboot failed sentinel present — see journal above"
-fi
 
 # ── Assert tools ──────────────────────────────────────────────────────────────
 log "Asserting tool presence"
