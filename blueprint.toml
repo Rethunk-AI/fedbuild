@@ -115,7 +115,7 @@ enabled = true
 # Drop-in under sshd_config.d/ so it survives package updates.
 [[customizations.files]]
 path = "/etc/ssh/sshd_config.d/99-hardening.conf"
-mode = "0600"
+mode = "0644"
 data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers user\n"
 
 # System-wide git identity — prevents "Please tell me who you are" errors.
