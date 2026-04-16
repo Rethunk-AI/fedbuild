@@ -52,12 +52,23 @@ brew_install() {
 brew_install actionlint
 brew_install buf
 brew_install kubernetes-cli
+brew_install oven-sh/bun/bun
 brew_install semgrep
 brew_install uv
 brew_install watchexec
 brew_install stripe/stripe-cli/stripe
 brew_install supabase/tap/supabase
 brew_install ollama
+
+# ── Yarn v4 Berry via corepack ────────────────────────────────────────────────
+# corepack ships with Node.js; 'enable' installs yarn/pnpm shims system-wide
+# (needs root — user has NOPASSWD:ALL). 'prepare yarn@stable' downloads v4
+# Berry and makes it the global default; runs as user into corepack's cache.
+log "Enabling corepack (yarn/pnpm shims)"
+sudo corepack enable
+log "Preparing Yarn v4 Berry"
+corepack prepare yarn@stable --activate
+log "Yarn $(yarn --version) active"
 
 # ── npm globals — AI CLI tools with no signed RPM repo ────────────────────────
 npm_install_global() {
