@@ -54,7 +54,7 @@ install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 %files
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/firstboot.sh
-%dir %attr(0755, user, user) %{_localstatedir}/lib/%{name}
+%dir %{_localstatedir}/lib/%{name}
 %{_unitdir}/%{name}.service
 %{_sysconfdir}/profile.d/devbox.sh
 %{_sysconfdir}/sudoers.d/user

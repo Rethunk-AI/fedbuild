@@ -8,6 +8,7 @@ ConditionPathExists=!/var/lib/bastion-vm-firstboot/done
 Type=oneshot
 TimeoutStartSec=infinity
 User=user
+ExecStartPre=+/usr/bin/install -d -o user -g user -m 0755 /var/lib/bastion-vm-firstboot
 ExecStart=/usr/libexec/bastion-vm-firstboot/firstboot.sh
 ExecStartPost=/usr/bin/touch /var/lib/bastion-vm-firstboot/done
 StandardOutput=journal+console
