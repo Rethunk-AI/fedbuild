@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify bump-patch bump-minor bump-major
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -155,6 +155,39 @@ clean:
 ## distclean: clean + remove built images
 distclean: clean
 	rm -rf $(OUTDIR)
+
+## bump-patch: bump Z in X.Y.Z (spec Release=1, blueprint version lockstep)
+bump-patch:
+	@cur=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
+	 X=$$(echo "$$cur" | cut -d. -f1); \
+	 Y=$$(echo "$$cur" | cut -d. -f2); \
+	 Z=$$(echo "$$cur" | cut -d. -f3); \
+	 new="$$X.$$Y.$$((Z+1))"; \
+	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
+	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
+	 echo "Bumped $$cur → $$new"; \
+	 $(MAKE) --no-print-directory check-versions
+
+## bump-minor: bump Y in X.Y.Z (resets Z to 0)
+bump-minor:
+	@cur=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
+	 X=$$(echo "$$cur" | cut -d. -f1); \
+	 Y=$$(echo "$$cur" | cut -d. -f2); \
+	 new="$$X.$$((Y+1)).0"; \
+	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
+	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
+	 echo "Bumped $$cur → $$new"; \
+	 $(MAKE) --no-print-directory check-versions
+
+## bump-major: bump X in X.Y.Z (resets Y.Z to 0.0)
+bump-major:
+	@cur=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
+	 X=$$(echo "$$cur" | cut -d. -f1); \
+	 new="$$((X+1)).0.0"; \
+	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
+	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
+	 echo "Bumped $$cur → $$new"; \
+	 $(MAKE) --no-print-directory check-versions
 
 ## help: list available targets
 help:

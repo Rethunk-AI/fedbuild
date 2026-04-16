@@ -22,6 +22,9 @@ make verify      # cosign verify SHA256SUMS (set CERT_IDENTITY + CERT_OIDC_ISSUE
 make clean       # rm rpmbuild/ and repo/
 make distclean   # clean + rm output/
 make deps        # install createrepo_c if missing
+make bump-patch  # bump Z in X.Y.Z (spec + blueprint lockstep) → runs check-versions
+make bump-minor  # bump Y, reset Z=0
+make bump-major  # bump X, reset Y=0, Z=0
 make help        # print target descriptions
 ```
 
