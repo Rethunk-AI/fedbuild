@@ -90,6 +90,7 @@ log "Booting VM (SSH forwarded to localhost:$SSH_PORT)"
 qemu-system-x86_64 \
     -enable-kvm \
     -machine q35 \
+    -cpu host \
     -m 4096 \
     -smp 2 \
     -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
