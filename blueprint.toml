@@ -106,6 +106,13 @@ gpgcheck = true
 gpgkeys = ["https://pkg.cloudflare.com/cloudflare-ascii-pubkey.gpg"]
 enabled = true
 
+# Harden SSHD: key-only auth, no root login, no X11.
+# Drop-in under sshd_config.d/ so it survives package updates.
+[[customizations.files]]
+path = "/etc/ssh/sshd_config.d/99-hardening.conf"
+mode = "0600"
+data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers user\n"
+
 # System-wide git identity — prevents "Please tell me who you are" errors.
 # The agent can override per-repo with: git config user.name / user.email
 [[customizations.files]]
