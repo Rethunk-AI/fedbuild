@@ -19,8 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
+      - name: Compute cache week
+        id: week
+        run: echo "key=$(date +%Y-%W)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache dnf packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/dnf
+          key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            dnf-f43-${{ steps.week.outputs.key }}-
+            dnf-f43-
+
       - name: Install build deps
-        run: dnf install -y --setopt=install_weak_deps=False actionlint shellcheck rpmlint rpm-build make
+        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True actionlint shellcheck rpmlint rpm-build make
 
       - name: Check (shellcheck + TOML + actionlint)
         run: make check
