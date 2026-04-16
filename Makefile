@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions lint shellcheck validate sign verify
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -70,11 +70,19 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
 	@echo "Wrote $(OUTDIR)/SHA256SUMS"
 
-## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
-check: check-versions
+## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
+check: check-versions check-settings
 	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
 	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
+
+## check-settings: JSON-schema validate baked agent-settings.json
+check-settings:
+	@command -v check-jsonschema >/dev/null 2>&1 || \
+		{ echo "ERROR: check-jsonschema not found — pip install check-jsonschema"; exit 1; }
+	check-jsonschema \
+		--schemafile $(FEDBUILD)/schemas/agent-settings.schema.json \
+		$(SRCDIR)/agent-settings.json
 
 ## check-versions: assert RPM spec Version and blueprint version match
 check-versions:

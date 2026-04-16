@@ -12,6 +12,7 @@ make repo        # copy RPM into repo/ and run createrepo
 make image       # build Fedora 43 VM image (requires sudo + SSH key set)
 make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM build)
 make check-versions  # assert spec Version matches blueprint version field
+make check-settings  # JSON-schema validate agent-settings.json
 make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
@@ -45,6 +46,8 @@ fedbuild/
     authorized_key                        # SSH pubkey (gitignored) — required by `make image`
   .github/workflows/
     ci.yml                                # fedora:43 lint: shellcheck + rpmlint + actionlint + TOML
+  schemas/
+    agent-settings.schema.json            # JSON Schema (2020-12) for baked ~/.claude/settings.json
   repo/                                   # local yum repo (createrepo output), passed via --extra-repo
   rpmbuild/                               # rpmbuild working tree
   output/                                 # built VM images
@@ -90,5 +93,6 @@ Agent can override per-repo: `git config user.name / user.email`
 - actionlint (pinned v1.7.7)
 - TOML syntax (`yq`)
 - `make check-versions` (spec ↔ blueprint parity)
+- `make check-settings` (JSON-schema validate `agent-settings.json`)
 
 Local equivalent: `make check`.

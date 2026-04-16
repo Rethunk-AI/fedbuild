@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Rethunk-AI/fedbuild/schemas/agent-settings.schema.json",
+  "title": "Bastion Agent Claude Code settings",
+  "description": "Minimal local schema for baked ~/.claude/settings.json. Root permits additional keys (Claude Code grows settings over time) but known subfields are strict to catch typos at CI.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": { "type": "array", "items": { "type": "string" } },
+        "deny":  { "type": "array", "items": { "type": "string" } },
+        "ask":   { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "env":   { "type": "object", "additionalProperties": { "type": "string" } },
+    "hooks": { "type": "object" },
+    "model": { "type": "string" }
+  }
+}

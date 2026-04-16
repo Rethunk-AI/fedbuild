@@ -33,10 +33,13 @@ jobs:
             dnf-f43-
 
       - name: Install build deps
-        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build make yq
+        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build make yq python3-pip
 
       - name: Install actionlint
         run: GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+
+      - name: Install check-jsonschema
+        run: pip install --break-system-packages check-jsonschema
 
       - name: Check (shellcheck + TOML + actionlint)
         run: make check
