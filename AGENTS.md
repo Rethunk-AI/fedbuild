@@ -16,6 +16,8 @@ make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
 make smoke       # boot VM in QEMU/KVM and assert firstboot + tool presence (requires built image)
+make sign        # cosign keyless-sign output/SHA256SUMS (Sigstore OIDC)
+make verify      # cosign verify SHA256SUMS (set CERT_IDENTITY + CERT_OIDC_ISSUER)
 make clean       # rm rpmbuild/ and repo/
 make distclean   # clean + rm output/
 make deps        # install createrepo_c if missing

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions lint shellcheck validate
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions lint shellcheck validate sign verify
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -10,6 +10,9 @@ SPECFILE  := $(FEDBUILD)/bastion-vm-firstboot/SPECS/bastion-vm-firstboot.spec
 BLUEPRINT         := $(FEDBUILD)/blueprint.toml
 KEYFILE           := $(FEDBUILD)/keys/authorized_key
 BLUEPRINT_EFFECTIVE := $(FEDBUILD)/blueprint.effective.toml
+SHA256SUMS_FILE   := $(OUTDIR)/SHA256SUMS
+SHA256SUMS_SIG    := $(OUTDIR)/SHA256SUMS.sig
+SHA256SUMS_CERT   := $(OUTDIR)/SHA256SUMS.pem
 
 PKG_NAME    := bastion-vm-firstboot
 PKG_VERSION := $(shell sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE))
@@ -102,6 +105,33 @@ validate: $(BLUEPRINT_EFFECTIVE)
 	@echo "Checking target image type..."
 	@image-builder list 2>/dev/null | grep -q 'fedora-43.*minimal-raw-zst.*x86_64' && echo "  OK" || \
 		{ echo "  ERROR: fedora-43 minimal-raw-zst x86_64 not found in image-builder list"; exit 1; }
+
+## sign: cosign keyless-sign output/SHA256SUMS (Sigstore OIDC); writes .sig + .pem
+sign:
+	@command -v cosign >/dev/null 2>&1 || \
+		{ echo "ERROR: cosign not found — https://github.com/sigstore/cosign"; exit 1; }
+	@test -f $(SHA256SUMS_FILE) || \
+		{ echo "ERROR: $(SHA256SUMS_FILE) not found — run: make image"; exit 1; }
+	cosign sign-blob --yes \
+		--output-signature  $(SHA256SUMS_SIG)  \
+		--output-certificate $(SHA256SUMS_CERT) \
+		$(SHA256SUMS_FILE)
+	@echo "Signed $(SHA256SUMS_FILE) → $(SHA256SUMS_SIG) + $(SHA256SUMS_CERT)"
+
+## verify: cosign verify SHA256SUMS against Rekor (CERT_IDENTITY + CERT_OIDC_ISSUER required)
+verify:
+	@command -v cosign >/dev/null 2>&1 || { echo "ERROR: cosign not found"; exit 1; }
+	@test -f $(SHA256SUMS_FILE) || { echo "ERROR: $(SHA256SUMS_FILE) not found"; exit 1; }
+	@test -f $(SHA256SUMS_SIG)  || { echo "ERROR: $(SHA256SUMS_SIG) not found — run: make sign"; exit 1; }
+	@test -f $(SHA256SUMS_CERT) || { echo "ERROR: $(SHA256SUMS_CERT) not found — run: make sign"; exit 1; }
+	@test -n "$(CERT_IDENTITY)"    || { echo "ERROR: set CERT_IDENTITY=<email|URI>"; exit 1; }
+	@test -n "$(CERT_OIDC_ISSUER)" || { echo "ERROR: set CERT_OIDC_ISSUER=<issuer URL>"; exit 1; }
+	cosign verify-blob \
+		--certificate           $(SHA256SUMS_CERT)  \
+		--signature             $(SHA256SUMS_SIG)   \
+		--certificate-identity  $(CERT_IDENTITY)    \
+		--certificate-oidc-issuer $(CERT_OIDC_ISSUER) \
+		$(SHA256SUMS_FILE)
 
 ## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
 smoke:
