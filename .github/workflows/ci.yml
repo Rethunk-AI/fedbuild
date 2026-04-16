@@ -27,16 +27,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /var/cache/dnf
-          key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml', 'blueprint.toml', 'bastion-vm-firstboot/SPECS/*.spec') }}
           restore-keys: |
             dnf-f43-${{ steps.week.outputs.key }}-
             dnf-f43-
 
       - name: Install build deps
-        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build make
+        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build make yq
 
       - name: Install actionlint
-        run: GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@latest
+        run: GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
       - name: Check (shellcheck + TOML + actionlint)
         run: make check
