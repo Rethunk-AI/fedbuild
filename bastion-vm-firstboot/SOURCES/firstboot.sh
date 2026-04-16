@@ -4,10 +4,13 @@
 #
 # Packages already handled by RPM repos (not listed here):
 #   cloudflared  → pkg.cloudflare.com/cloudflared/rpm  (signed)
+#   code         → packages.microsoft.com/yumrepos/vscode (signed)
 #
 # kubectl is intentionally installed via brew (kubernetes-cli) rather than
 # pkgs.k8s.io because that repo requires a pinned minor version in its URL,
 # which would break the always-update policy of this image.
+#
+# AI CLI tools (claude, gemini) installed via npm — no signed RPM repo exists.
 set -euo pipefail
 
 log() { echo "[firstboot] $(date -Iseconds) $*"; }
@@ -55,6 +58,22 @@ brew_install watchexec
 brew_install stripe/stripe-cli/stripe
 brew_install supabase/tap/supabase
 brew_install ollama
+
+# ── npm globals — AI CLI tools with no signed RPM repo ────────────────────────
+npm_install_global() {
+    local pkg="$1"
+    log "Installing $pkg (npm)"
+    if npm install -g "$pkg"; then
+        log "$pkg OK"
+    else
+        log "WARNING: $pkg npm install failed — continuing"
+    fi
+}
+
+# claude: Anthropic's AI coding CLI — npm is the official install method
+npm_install_global @anthropic-ai/claude-code
+# gemini: Google's Gemini CLI — npm is the official install method
+npm_install_global @google/gemini-cli
 
 # ── Go workspace ──────────────────────────────────────────────────────────────
 log "Creating Go workspace dirs"

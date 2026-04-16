@@ -1,6 +1,6 @@
 name = "fedora-43-devbox"
 description = "Fedora 43 minimal image — Git, Node.js, and Go development"
-version = "0.0.9"
+version = "0.0.10"
 distro = "fedora-43"
 
 # All packages use version = "*" — always pull the latest available.
@@ -52,11 +52,13 @@ packages = [
     { name = "azure-cli",      version = "*" },
 
     # --- from external repos (see [[customizations.repositories]] below) ---
+    { name = "code",           version = "*" },   # VS Code stable — includes 'code' CLI
     { name = "code-insiders",  version = "*" },
     { name = "cloudflared",    version = "*" },
 
     # --- first-boot: Homebrew + actionlint, buf, kubectl, ollama, semgrep,
     #                 stripe-cli, supabase, uv, watchexec
+    #                 AI CLIs: @anthropic-ai/claude-code, @google/gemini-cli (npm)
     #                 + /etc/profile.d/devbox.sh + /etc/sudoers.d/user
     { name = "bastion-vm-firstboot", version = "*" },
 ]
