@@ -19,6 +19,7 @@ make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
 make smoke       # boot VM in QEMU/KVM and assert firstboot + tool presence (requires built image)
+make diff-packages # drift: declared RPMs (blueprint) vs rpm -qa on running VM
 make sign        # cosign keyless-sign output/SHA256SUMS (Sigstore OIDC)
 make verify      # cosign verify SHA256SUMS (set CERT_IDENTITY + CERT_OIDC_ISSUER)
 make clean       # rm rpmbuild/ and repo/
@@ -49,6 +50,7 @@ fedbuild/
       Brewfile → /usr/share/bastion-vm-firstboot/Brewfile  # brew formulae list (brew bundle)
   tests/
     smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
+    diff-packages.sh                      # blueprint vs rpm -qa drift report (used by `make diff-packages`)
     size.baseline                         # image-size budget baseline (bytes, raw.zst)
   keys/
     authorized_key                        # SSH pubkey (gitignored) — required by `make image`

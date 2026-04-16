@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Image size budget — `make image` writes `output/SIZE` and runs `make check-size`; fails if compressed image exceeds `tests/size.baseline` by more than `SIZE_BUDGET_PCT` (default 10%). `make bless-size` promotes current size to baseline.
 - `Brewfile` — brew formulae list extracted from inline `firstboot.sh` loop into `SOURCES/Brewfile`, shipped by the RPM at `/usr/share/bastion-vm-firstboot/Brewfile`. firstboot now runs `brew bundle --file=...`; single diffable source of truth.
 
+- `make diff-packages` — drift report: compares blueprint-declared RPM names against `rpm -qa` on a running VM (`VM_HOST`, `VM_SSH_PORT`, `SSH_KEY` override defaults). Flags declared-but-missing packages without failing.
+
 ### Changed
 - `firstboot.sh` — removed per-package brew install loop; replaced with a single `brew bundle` call.
 

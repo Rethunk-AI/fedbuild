@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -88,7 +88,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
 check: check-versions check-settings
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/diff-packages.sh
 	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
@@ -131,7 +131,7 @@ check-versions:
 
 ## shellcheck: lint all shell scripts in SOURCES and tests/
 shellcheck:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/diff-packages.sh
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
@@ -175,6 +175,11 @@ verify:
 		--certificate-identity  $(CERT_IDENTITY)    \
 		--certificate-oidc-issuer $(CERT_OIDC_ISSUER) \
 		$(SHA256SUMS_FILE)
+
+## diff-packages: compare blueprint-declared RPMs against rpm -qa on a running VM
+## (override: VM_HOST=user@localhost VM_SSH_PORT=2222 SSH_KEY=keys/authorized_key)
+diff-packages:
+	@bash tests/diff-packages.sh
 
 ## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
 smoke:
