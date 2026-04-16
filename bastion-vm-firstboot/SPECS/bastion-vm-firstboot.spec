@@ -4,6 +4,7 @@ Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
 BuildArch:      noarch
+BuildRequires:  systemd-rpm-macros
 
 Requires:       bash
 Requires:       curl
