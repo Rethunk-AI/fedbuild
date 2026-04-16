@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        1.0.0
+Version:        0.1.0
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
@@ -55,6 +55,7 @@ install -d %{buildroot}%{_localstatedir}/lib/%{name}
 %{_sysconfdir}/sudoers.d/user
 
 %changelog
-* Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 1.0.0-1
-- Initial package
-- Create /var/lib/bastion-vm-firstboot/ owned by user for done sentinel
+* Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.1.0-1
+- Bake Claude Code agent configuration into ~/.claude/ via firstboot
+- Add CHANGELOG.md; reset versions to 0.1.0
+- Initial package: firstboot service, devbox-profile, sudoers, done sentinel
