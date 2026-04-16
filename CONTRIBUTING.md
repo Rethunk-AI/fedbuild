@@ -15,10 +15,9 @@ make
 Run all local checks:
 
 ```bash
-make shellcheck   # lint shell scripts
+make check        # shellcheck + TOML syntax + actionlint (fast, no RPM build)
 make rpm          # build RPM
 make lint         # rpmlint on built RPM
-python3 -c "import tomllib; tomllib.load(open('blueprint.toml', 'rb'))"  # TOML syntax
 ```
 
 All checks must pass. CI runs the same suite automatically.

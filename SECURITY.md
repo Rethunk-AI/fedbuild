@@ -16,4 +16,4 @@ The built VM is designed for isolated local use:
 
 ## Reporting Issues
 
-Open an issue at <https://github.com/Rethunk-Tech/fedbuild/issues>.
+Open an issue at <https://github.com/Rethunk-AI/fedbuild/issues>.

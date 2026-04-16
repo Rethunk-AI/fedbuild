@@ -4,8 +4,7 @@
 
 ## Checklist
 
-- [ ] `make shellcheck` passes
+- [ ] `make check` passes (shellcheck + TOML + actionlint)
 - [ ] `make rpm && make lint` passes
-- [ ] `python3 -c "import tomllib; tomllib.load(open('blueprint.toml', 'rb'))"` passes
 - [ ] `blueprint.toml` version bumped (if blueprint changed)
 - [ ] RPM spec `Version:` bumped (if RPM changed)
