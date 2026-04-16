@@ -79,10 +79,19 @@ until ssh "${SSH_OPTS[@]}" "test -f /var/lib/bastion-vm-firstboot/done" 2>/dev/n
 done
 log "firstboot done"
 
+# Check for failure sentinel — belt-and-suspenders; firstboot should have
+# exited non-zero before writing done if any installs failed, but guard here
+# too in case of legacy images or unexpected race conditions.
+if ssh "${SSH_OPTS[@]}" "test -f /var/lib/bastion-vm-firstboot/failed" 2>/dev/null; then
+    log "Dumping firstboot journal for diagnostics:"
+    ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
+    die "firstboot failed sentinel present — see journal above"
+fi
+
 # ── Assert tools ──────────────────────────────────────────────────────────────
 log "Asserting tool presence"
 FAIL=""
-TOOLS=(claude git gh go node brew semgrep actionlint buf kubectl)
+TOOLS=(claude gemini git gh go node brew semgrep actionlint buf kubectl uv bun yarn stripe supabase watchexec)
 for tool in "${TOOLS[@]}"; do
     # shellcheck disable=SC2029  # $tool intentionally expands client-side
     if ssh "${SSH_OPTS[@]}" "command -v $tool" 2>/dev/null; then
@@ -109,6 +118,7 @@ log_version go
 log_version buf
 log_version semgrep
 log_version actionlint
+log_version gemini
 
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"
