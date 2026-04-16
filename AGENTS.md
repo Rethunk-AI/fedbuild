@@ -64,3 +64,4 @@ Agent can override per-repo: `git config user.name / user.email`
 - Done sentinel: `/var/lib/bastion-vm-firstboot/done` — delete to re-run on next boot
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
+- `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`

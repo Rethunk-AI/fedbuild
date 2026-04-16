@@ -2,13 +2,7 @@
 
 ## Getting Started
 
-```bash
-git clone git@github.com:Rethunk-AI/fedbuild.git
-cd fedbuild
-make deps
-cp ~/.ssh/id_ed25519.pub keys/authorized_key
-make
-```
+Clone the repo, then follow the [Quick Start in HUMANS.md](HUMANS.md#quick-start).
 
 ## Before Submitting a PR
 
