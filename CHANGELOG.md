@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-16
+
+### Added
+- Blueprint packages: `jq`, `yq`, `sqlite`, `buildah`, `skopeo`
+
+## [0.2.0] - 2026-04-16
+
+### Added
+- `BuildRequires: systemd-rpm-macros` in spec
+- `make check-versions` enforces parity between spec `Version` and blueprint `version`
+
+### Changed
+- Agent config (`CLAUDE.md`, `settings.json`) extracted from inline heredocs into RPM-managed `SOURCES/agent-claude.md` and `SOURCES/agent-settings.json`
+
 ## [0.1.0] - 2026-04-16
 
 ### Added
