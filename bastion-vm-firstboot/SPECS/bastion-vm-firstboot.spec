@@ -71,10 +71,10 @@ install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 - make diff-packages: declared vs installed drift report
 - make changelog: git-cliff automation from Conventional Commits
 
-* Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.3.0-1
+* Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.3.0-1
 - Add jq, yq, sqlite, buildah, skopeo to blueprint
 
-* Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.2.0-1
+* Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.2.0-1
 - Sync version to blueprint 0.2.0
 - Add BuildRequires: systemd-rpm-macros
 
