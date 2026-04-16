@@ -3,41 +3,28 @@
 ## Quick Start
 
 ```bash
-# Prerequisites
-make deps          # install createrepo_c
-
-# Place your SSH public key
-cp ~/.ssh/id_ed25519.pub keys/authorized_key
-
-# Build RPM + local yum repo (default)
-make
-
-# Build VM image (requires sudo)
-make image
+make deps                                  # install createrepo_c (once)
+cp ~/.ssh/id_ed25519.pub keys/authorized_key   # place your SSH pubkey
+make                                       # build RPM + local yum repo (default)
+make image                                 # build Fedora 43 VM image (needs sudo)
+make smoke                                 # boot + assert firstboot (needs KVM)
 ```
 
-## All Targets
-
-| Target | Description |
-|--------|-------------|
-| `make` / `make repo` | Build RPM and index local yum repo |
-| `make rpm` | Build RPM only |
-| `make image` | Build Fedora 43 VM image |
-| `make check` | Fast pre-push: shellcheck + TOML syntax + actionlint |
-| `make shellcheck` | Lint shell scripts |
-| `make lint` | Run rpmlint on built RPM |
-| `make validate` | Check TOML syntax, SSH key, image-builder target |
-| `make smoke` | Boot VM in QEMU/KVM and verify firstboot (requires KVM + built image) |
-| `make clean` | Remove build artifacts (keep images) |
-| `make distclean` | Remove everything including images |
-| `make deps` | Install createrepo_c |
+`make help` lists every target. Full reference + gotchas in **[AGENTS.md](AGENTS.md)**.
 
 ## What First Boot Installs
 
-The `bastion-vm-firstboot` service runs once as `user` and installs via Homebrew:
+- **RPM packages** — declared in [`blueprint.toml`](blueprint.toml) (`packages = [...]`)
+- **Brew formulae** — listed in [`bastion-vm-firstboot/SOURCES/Brewfile`](bastion-vm-firstboot/SOURCES/Brewfile); consumed by `brew bundle` on first boot
+- **npm globals** — `@anthropic-ai/claude-code`, `@google/gemini-cli` (hardcoded in `firstboot.sh` — no signed RPM source)
 
-`actionlint`, `buf`, `bun`, `kubectl`, `semgrep`, `stripe-cli`, `supabase`, `uv`, `watchexec`
+Progress: `journalctl -u bastion-vm-firstboot -f` on the VM.
 
-AI coding CLIs via npm: `@anthropic-ai/claude-code`, `@google/gemini-cli`
+## Release Flow
 
-Progress is visible in the journal: `journalctl -u bastion-vm-firstboot -f`
+```bash
+make bump-minor       # spec + blueprint version lockstep → runs check-versions
+make changelog        # regenerate CHANGELOG.md from Conventional Commits
+git commit -am "chore(release): $(yq -p toml '.version' blueprint.toml)"
+git tag "v$(yq -p toml '.version' blueprint.toml)"
+```

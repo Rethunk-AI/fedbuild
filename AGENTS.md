@@ -95,7 +95,9 @@ Agent can override per-repo: `git config user.name / user.email`
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
 - `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
-- RPM builds are reproducible: `SOURCE_DATE_EPOCH` = commit ctime of spec/sources; `clamp_mtime_to_source_date_epoch` + `use_source_date_epoch_as_buildtime` pin buildtime and file mtimes. Two back-to-back `make rpm` runs produce bytewise-identical RPMs.
+- RPM builds reproducible (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across runs)
+- Image size budget enforced by `make check-size` against `tests/size.baseline` (run `make bless-size` after intentional size changes)
+- Brew formulae list lives in `SOURCES/Brewfile` (consumed by `brew bundle` in firstboot) — do not hardcode brew packages in `firstboot.sh`
 - `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
 - smoke failures: if SSH came up, firstboot journal is captured to `$OUTDIR/smoke-fail.log` (override via `FAIL_LOG=...`)
 
