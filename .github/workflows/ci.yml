@@ -14,7 +14,7 @@ jobs:
       image: fedora:43
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
       - name: Install build deps
         run: dnf install -y --setopt=install_weak_deps=False actionlint shellcheck rpmlint rpm-build make
