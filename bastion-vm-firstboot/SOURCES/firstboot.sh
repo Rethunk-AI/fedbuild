@@ -14,10 +14,12 @@
 set -euo pipefail
 
 SENTINEL_DIR=/var/lib/bastion-vm-firstboot
+BREW_INSTALLER=""
 log() { echo "[firstboot] $(date -Iseconds) $*"; }
 
 on_exit() {
     local rc=$?
+    [[ -n "$BREW_INSTALLER" ]] && rm -f "$BREW_INSTALLER"
     if [[ $rc -ne 0 ]]; then
         log "FAILED (exit $rc) — writing failure sentinel"
         touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
@@ -34,15 +36,11 @@ export PATH="${HOME}/.npm-global/bin:${PATH}"
 # ── Homebrew ──────────────────────────────────────────────────────────────────
 if ! command -v brew &>/dev/null; then
     log "Installing Homebrew"
-    _brew_installer=$(mktemp /tmp/brew-install-XXXXXX.sh)
-    trap 'rm -f "$_brew_installer"' EXIT
+    BREW_INSTALLER=$(mktemp /tmp/brew-install-XXXXXX.sh)
     curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh \
-        -o "$_brew_installer"
-    log "Homebrew installer downloaded — $(sha256sum "$_brew_installer")"
-    NONINTERACTIVE=1 bash "$_brew_installer"
-    rm -f "$_brew_installer"
-    trap - EXIT
-    trap on_exit EXIT  # re-register after brew installer cleanup removed it
+        -o "$BREW_INSTALLER"
+    log "Homebrew installer downloaded — $(sha256sum "$BREW_INSTALLER")"
+    NONINTERACTIVE=1 bash "$BREW_INSTALLER"
 fi
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
