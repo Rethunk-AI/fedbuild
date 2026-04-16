@@ -1,0 +1,113 @@
+name = "fedora-43-devbox"
+description = "Fedora 43 minimal image — Git, Node.js, and Go development"
+version = "0.0.9"
+distro = "fedora-43"
+
+# All packages use version = "*" — always pull the latest available.
+# No version pins anywhere in this blueprint (pkgs.k8s.io requires a
+# minor-version in its URL, so kubectl lives in brew instead).
+packages = [
+    # --- version control ---
+    { name = "git",            version = "*" },
+    { name = "git-delta",      version = "*" },
+
+    # --- runtimes / toolchains ---
+    { name = "nodejs",         version = "*" },
+    { name = "npm",            version = "*" },
+    { name = "golang",         version = "*" },
+
+    # --- build essentials ---
+    { name = "make",           version = "*" },
+    { name = "gcc",            version = "*" },
+    { name = "gcc-c++",        version = "*" },
+    { name = "pkgconf",        version = "*" },
+
+    # --- shell workflow ---
+    { name = "neovim",         version = "*" },
+    { name = "bash-completion", version = "*" },
+    { name = "less",           version = "*" },
+    { name = "man-db",         version = "*" },
+    { name = "man-pages",      version = "*" },
+    { name = "ripgrep",        version = "*" },
+    { name = "fd-find",        version = "*" },
+    { name = "tokei",          version = "*" },
+
+    # --- debug / profiling ---
+    { name = "gdb",            version = "*" },
+    { name = "strace",         version = "*" },
+
+    # --- containers ---
+    { name = "podman",         version = "*" },
+
+    # --- utilities ---
+    { name = "curl",           version = "*" },
+    { name = "plocate",        version = "*" },
+    { name = "btop",           version = "*" },
+    { name = "which",          version = "*" },
+
+    # --- from fedora repos ---
+    { name = "gh",             version = "*" },
+    { name = "ShellCheck",     version = "*" },
+    { name = "helm",           version = "*" },
+    { name = "azure-cli",      version = "*" },
+
+    # --- from external repos (see [[customizations.repositories]] below) ---
+    { name = "code-insiders",  version = "*" },
+    { name = "cloudflared",    version = "*" },
+
+    # --- first-boot: Homebrew + actionlint, buf, kubectl, ollama, semgrep,
+    #                 stripe-cli, supabase, uv, watchexec
+    #                 + /etc/profile.d/devbox.sh + /etc/sudoers.d/user
+    { name = "bastion-vm-firstboot", version = "*" },
+]
+
+[customizations]
+hostname = "devbox"
+
+[[customizations.user]]
+name = "user"
+key = "ssh-ed25519 CHANGEME user@localhost"
+groups = ["wheel"]
+
+[customizations.services]
+enabled = ["sshd", "bastion-vm-firstboot"]
+
+[customizations.locale]
+languages = ["en_US.UTF-8"]
+keyboard = "us"
+
+[customizations.timezone]
+timezone = "UTC"
+
+[customizations.kernel]
+append = "quiet"
+
+# single root partition — no LVM, no split mounts
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = 21474836480    # 20 GiB
+
+# Microsoft repo — VS Code Insiders
+[[customizations.repositories]]
+id = "vscode"
+name = "Visual Studio Code"
+baseurls = ["https://packages.microsoft.com/yumrepos/vscode"]
+gpgcheck = true
+gpgkeys = ["https://packages.microsoft.com/keys/microsoft.asc"]
+enabled = true
+
+# Cloudflare repo — cloudflared tunnel client (signed, Cloudflare-owned)
+[[customizations.repositories]]
+id = "cloudflared-stable"
+name = "Cloudflare cloudflared"
+baseurls = ["https://pkg.cloudflare.com/cloudflared/rpm"]
+gpgcheck = true
+gpgkeys = ["https://pkg.cloudflare.com/cloudflare-ascii-pubkey.gpg"]
+enabled = true
+
+# System-wide git identity — prevents "Please tell me who you are" errors.
+# The agent can override per-repo with: git config user.name / user.email
+[[customizations.files]]
+path = "/etc/gitconfig"
+mode = "0644"
+data = "[user]\n\tname = Bastion Agent\n\temail = bastion-agent@rethunk.tech\n[init]\n\tdefaultBranch = main\n[core]\n\teditor = nvim\n[pull]\n\trebase = true\n"
