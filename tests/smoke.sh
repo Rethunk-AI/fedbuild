@@ -153,7 +153,7 @@ done
 # ── Assert tools ──────────────────────────────────────────────────────────────
 log "Asserting tool presence"
 FAIL=""
-TOOLS=(claude gemini git gh go node brew semgrep actionlint buf kubectl uv bun yarn stripe supabase watchexec)
+TOOLS=(claude gemini git gh go node brew semgrep actionlint buf kubectl uv bun yarn supabase watchexec)
 for tool in "${TOOLS[@]}"; do
     # shellcheck disable=SC2029  # $tool intentionally expands client-side
     if ssh "${SSH_OPTS[@]}" "command -v $tool" 2>/dev/null; then

@@ -63,7 +63,7 @@ packages = [
     { name = "cloudflared",    version = "*" },
 
     # --- first-boot: Homebrew + actionlint, buf, kubectl, semgrep,
-    #                 stripe-cli, supabase, uv, watchexec
+    #                 supabase, uv, watchexec
     #                 AI CLIs: @anthropic-ai/claude-code, @google/gemini-cli (npm)
     #                 + /etc/profile.d/devbox.sh + /etc/sudoers.d/user
     { name = "bastion-vm-firstboot", version = "*" },
