@@ -66,13 +66,13 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
 check:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
 	@python3 -c "import tomllib; tomllib.load(open('$(BLUEPRINT)', 'rb'))" && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
-## shellcheck: lint all shell scripts in SOURCES
+## shellcheck: lint all shell scripts in SOURCES and tests/
 shellcheck:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)

@@ -27,6 +27,7 @@ make image
 | `make shellcheck` | Lint shell scripts |
 | `make lint` | Run rpmlint on built RPM |
 | `make validate` | Check TOML syntax, SSH key, image-builder target |
+| `make smoke` | Boot VM in QEMU/KVM and verify firstboot (requires KVM + built image) |
 | `make clean` | Remove build artifacts (keep images) |
 | `make distclean` | Remove everything including images |
 | `make deps` | Install createrepo_c |

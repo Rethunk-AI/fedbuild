@@ -14,6 +14,7 @@ make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM 
 make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
+make smoke       # boot VM in QEMU/KVM and assert firstboot + tool presence (requires built image)
 make clean       # rm rpmbuild/ and repo/
 make distclean   # clean + rm output/
 make deps        # install createrepo_c if missing
@@ -29,9 +30,12 @@ fedbuild/
     SPECS/bastion-vm-firstboot.spec       # RPM spec
     SOURCES/
       firstboot.sh                        # runs on first boot as 'user', installs Homebrew + tools
+                                          #   also writes ~/.claude/CLAUDE.md + settings.json
       bastion-vm-firstboot.service        # systemd oneshot, User=user, TimeoutStartSec=infinity
       devbox-profile.sh → /etc/profile.d/devbox.sh   # GOPATH, PATH, Homebrew shellenv
       user-sudoers → /etc/sudoers.d/user  # NOPASSWD: ALL (intentional, no external IP)
+  tests/
+    smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
   repo/                                   # local yum repo (createrepo output), passed via --extra-repo
   rpmbuild/                               # rpmbuild working tree
   output/                                 # built VM images
@@ -65,3 +69,4 @@ Agent can override per-repo: `git config user.name / user.email`
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
 - `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
+- `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
