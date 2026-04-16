@@ -1,0 +1,40 @@
+name: Feature Request
+description: Add a package, tool, or capability to the VM image
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Request type
+      options:
+        - Add RPM package to blueprint
+        - Add Homebrew tool to first-boot
+        - Add environment variable / PATH entry
+        - Add baked-in file or config
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: package
+    attributes:
+      label: Package or tool name
+      placeholder: e.g. ripgrep, gh, starship
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: Why does the Bastion Agent need this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Availability (RPM vs Homebrew only), version constraints, links.
+    validations:
+      required: false

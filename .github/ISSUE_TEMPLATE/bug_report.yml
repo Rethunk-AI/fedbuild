@@ -1,0 +1,50 @@
+name: Bug Report
+description: Something broken in the build or the VM image
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check `make shellcheck lint validate` passes locally.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - RPM build (make rpm / make lint)
+        - VM image build (make image)
+        - First-boot service (bastion-vm-firstboot)
+        - Blueprint / osbuild
+        - Makefile / tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the exact error message or unexpected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. make ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS: Fedora 43
+        image-builder version: ...
+        rpmbuild version: ...
+    validations:
+      required: false
