@@ -49,6 +49,8 @@ packages = [
     { name = "plocate",        version = "*" },
     { name = "btop",           version = "*" },
     { name = "which",          version = "*" },
+    { name = "tar",            version = "*" },   # required by Homebrew (ruby extract)
+    { name = "ruby",           version = "*" },   # Homebrew dependency
 
     # --- from fedora repos ---
     { name = "gh",             version = "*" },
