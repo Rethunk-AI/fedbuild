@@ -94,6 +94,22 @@ for tool in "${TOOLS[@]}"; do
 done
 [[ -z "$FAIL" ]] || die "one or more tools missing"
 
+# ── Log installed versions ────────────────────────────────────────────────────
+# Captures actual version strings so partial/stale installs are visible in CI.
+log "Logging installed versions"
+log_version() {
+    local tool="$1" actual
+    # shellcheck disable=SC2029
+    actual=$(ssh "${SSH_OPTS[@]}" "$tool --version 2>&1 | head -1" 2>/dev/null) || actual="<error>"
+    log "  $tool: ${actual:-<no output>}"
+}
+log_version claude
+log_version node
+log_version go
+log_version buf
+log_version semgrep
+log_version actionlint
+
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"
 for f in /home/user/.claude/CLAUDE.md /home/user/.claude/settings.json; do
