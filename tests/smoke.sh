@@ -61,13 +61,21 @@ log "Image: $IMAGE"
 TMPIMAGE=$(mktemp /tmp/smoke-XXXXXX.raw)
 QEMU_PID=""
 cleanup() {
-    rm -f "$TMPIMAGE"
+    rm -f "$TMPIMAGE" "${TMPVARS:-}"
     [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
 zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
+
+# OVMF (UEFI) firmware — minimal-raw-zst boots via UEFI only.
+OVMF_CODE="${OVMF_CODE:-/usr/share/edk2/ovmf/OVMF_CODE.fd}"
+OVMF_VARS_SRC="${OVMF_VARS_SRC:-/usr/share/edk2/ovmf/OVMF_VARS.fd}"
+[[ -r "$OVMF_CODE" ]] || die "OVMF_CODE not readable: $OVMF_CODE (install edk2-ovmf)"
+[[ -r "$OVMF_VARS_SRC" ]] || die "OVMF_VARS not readable: $OVMF_VARS_SRC"
+TMPVARS=$(mktemp /tmp/smoke-vars-XXXXXX.fd)
+cp "$OVMF_VARS_SRC" "$TMPVARS"
 
 SERIAL_LOG="${SERIAL_LOG:-$OUTDIR/smoke-serial.log}"
 QEMU_LOG="${QEMU_LOG:-$OUTDIR/smoke-qemu.log}"
@@ -81,8 +89,11 @@ log "QEMU stderr    → $QEMU_LOG"
 log "Booting VM (SSH forwarded to localhost:$SSH_PORT)"
 qemu-system-x86_64 \
     -enable-kvm \
+    -machine q35 \
     -m 4096 \
     -smp 2 \
+    -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
+    -drive "if=pflash,format=raw,file=$TMPVARS" \
     -drive "file=$TMPIMAGE,format=raw,if=virtio" \
     -net nic,model=virtio \
     -net "user,hostfwd=tcp::${SSH_PORT}-:22" \
