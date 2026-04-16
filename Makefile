@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -13,6 +13,9 @@ BLUEPRINT_EFFECTIVE := $(FEDBUILD)/blueprint.effective.toml
 SHA256SUMS_FILE   := $(OUTDIR)/SHA256SUMS
 SHA256SUMS_SIG    := $(OUTDIR)/SHA256SUMS.sig
 SHA256SUMS_CERT   := $(OUTDIR)/SHA256SUMS.pem
+SIZE_FILE         := $(OUTDIR)/SIZE
+SIZE_BASELINE     := $(FEDBUILD)/tests/size.baseline
+SIZE_BUDGET_PCT   ?= 10
 
 PKG_NAME    := bastion-vm-firstboot
 PKG_VERSION := $(shell sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE))
@@ -78,6 +81,10 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		minimal-raw-zst
 	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
 	@echo "Wrote $(OUTDIR)/SHA256SUMS"
+	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
+	 stat -c%s "$$img" > $(SIZE_FILE); \
+	 echo "Wrote $(SIZE_FILE) ($$(cat $(SIZE_FILE)) bytes)"
+	@$(MAKE) --no-print-directory check-size
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
 check: check-versions check-settings
@@ -92,6 +99,25 @@ check-settings:
 	check-jsonschema \
 		--schemafile $(FEDBUILD)/schemas/agent-settings.schema.json \
 		$(SRCDIR)/agent-settings.json
+
+## check-size: fail if built image exceeds baseline * (1 + SIZE_BUDGET_PCT/100)
+check-size:
+	@test -f $(SIZE_FILE) || { echo "ERROR: $(SIZE_FILE) missing — run: make image"; exit 1; }
+	@test -f $(SIZE_BASELINE) || { echo "ERROR: $(SIZE_BASELINE) missing — run: make bless-size"; exit 1; }
+	@cur=$$(cat $(SIZE_FILE)); base=$$(cat $(SIZE_BASELINE)); pct=$(SIZE_BUDGET_PCT); \
+	 limit=$$(( base + base * pct / 100 )); \
+	 delta=$$(( cur - base )); \
+	 pct_delta=$$(awk -v c=$$cur -v b=$$base 'BEGIN{printf "%.2f", (c-b)*100.0/b}'); \
+	 echo "Image size: $$cur bytes (baseline $$base, $$pct_delta%, budget +$$pct%)"; \
+	 if [ "$$cur" -gt "$$limit" ]; then \
+	     echo "ERROR: image exceeds baseline by >$$pct% (cur=$$cur, limit=$$limit, delta=$$delta)"; exit 1; \
+	 fi
+
+## bless-size: promote current image size to baseline (commit tests/size.baseline)
+bless-size:
+	@test -f $(SIZE_FILE) || { echo "ERROR: $(SIZE_FILE) missing — run: make image"; exit 1; }
+	cp $(SIZE_FILE) $(SIZE_BASELINE)
+	@echo "Baseline updated → $(SIZE_BASELINE) ($$(cat $(SIZE_BASELINE)) bytes)"
 
 ## check-versions: assert RPM spec Version and blueprint version match
 check-versions:

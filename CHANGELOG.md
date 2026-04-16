@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Reproducible RPM builds — `SOURCE_DATE_EPOCH` from last commit touching spec/sources; `clamp_mtime_to_source_date_epoch` + `use_source_date_epoch_as_buildtime` pin file mtimes and buildtime. Two successive `make rpm` runs produce byte-identical output.
+- Image size budget — `make image` writes `output/SIZE` and runs `make check-size`; fails if compressed image exceeds `tests/size.baseline` by more than `SIZE_BUDGET_PCT` (default 10%). `make bless-size` promotes current size to baseline.
 
 ## [0.3.0] - 2026-04-16
 

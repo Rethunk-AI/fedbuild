@@ -13,6 +13,8 @@ make image       # build Fedora 43 VM image (requires sudo + SSH key set)
 make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM build)
 make check-versions  # assert spec Version matches blueprint version field
 make check-settings  # JSON-schema validate agent-settings.json
+make check-size      # fail if image > baseline * (1 + SIZE_BUDGET_PCT/100)  [default 10%]
+make bless-size      # promote current image size to tests/size.baseline
 make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
@@ -46,6 +48,7 @@ fedbuild/
       agent-settings.json → ~user/.claude/settings.json  # baked agent settings
   tests/
     smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
+    size.baseline                         # image-size budget baseline (bytes, raw.zst)
   keys/
     authorized_key                        # SSH pubkey (gitignored) — required by `make image`
   .github/workflows/
