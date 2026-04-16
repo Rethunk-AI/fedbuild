@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        0.2.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
@@ -63,6 +63,9 @@ install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 %{_datadir}/%{name}/agent-settings.json
 
 %changelog
+* Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.3.0-1
+- Add jq, yq, sqlite, buildah, skopeo to blueprint
+
 * Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.2.0-1
 - Sync version to blueprint 0.2.0
 - Add BuildRequires: systemd-rpm-macros

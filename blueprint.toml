@@ -1,6 +1,6 @@
 name = "fedora-43-devbox"
 description = "Fedora 43 minimal image — Git, Node.js, and Go development"
-version = "0.2.0"
+version = "0.3.0"
 distro = "fedora-43"
 
 # All packages use version = "*" — always pull the latest available.
@@ -38,8 +38,13 @@ packages = [
 
     # --- containers ---
     { name = "podman",         version = "*" },
+    { name = "buildah",        version = "*" },
+    { name = "skopeo",         version = "*" },
 
     # --- utilities ---
+    { name = "jq",             version = "*" },
+    { name = "yq",             version = "*" },
+    { name = "sqlite",         version = "*" },
     { name = "curl",           version = "*" },
     { name = "plocate",        version = "*" },
     { name = "btop",           version = "*" },
