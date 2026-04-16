@@ -64,6 +64,8 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		--extra-repo $(REPODIR)           \
 		--output-dir $(OUTDIR)            \
 		minimal-raw-zst
+	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
+	@echo "Wrote $(OUTDIR)/SHA256SUMS"
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
 check: check-versions
