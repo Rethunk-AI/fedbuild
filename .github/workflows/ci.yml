@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: dnf install -y --setopt=install_weak_deps=False shellcheck rpmlint rpm-build make
+
+      - name: shellcheck
+        run: make shellcheck
+
+      - name: Build RPM
+        run: make rpm
+
+      - name: rpmlint
+        run: make lint
+
+      - name: Blueprint TOML syntax
+        run: python3 -c "import tomllib; tomllib.load(open('blueprint.toml', 'rb'))" && echo "OK"
