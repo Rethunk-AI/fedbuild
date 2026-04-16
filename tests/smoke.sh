@@ -18,9 +18,25 @@ SSH_KEY="${SSH_KEY:-keys/authorized_key}"
 SSH_PORT="${SSH_PORT:-2222}"
 TIMEOUT_SSH="${TIMEOUT_SSH:-120}"
 TIMEOUT_FIRSTBOOT="${TIMEOUT_FIRSTBOOT:-1200}"
+FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
+SSH_UP=0
 
 log() { echo "[smoke] $(date -Iseconds) $*"; }
-die() { echo "[smoke] ERROR: $*" >&2; exit 1; }
+
+# dump_journal: grab firstboot journal to $FAIL_LOG (best-effort; SSH may be down)
+dump_journal() {
+    [[ "$SSH_UP" == "1" ]] || { log "SSH never came up — no journal to capture"; return; }
+    log "Capturing firstboot journal → $FAIL_LOG"
+    mkdir -p "$(dirname "$FAIL_LOG")"
+    ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" \
+        > "$FAIL_LOG" 2>&1 || log "  (journal capture failed)"
+}
+
+die() {
+    echo "[smoke] ERROR: $*" >&2
+    dump_journal
+    exit 1
+}
 
 # ── Locate image ──────────────────────────────────────────────────────────────
 IMAGE=$(find "$OUTDIR" -name '*.raw.zst' | sort | tail -1)
@@ -67,6 +83,7 @@ until ssh "${SSH_OPTS[@]}" true 2>/dev/null; do
     (( $(date +%s) < deadline )) || die "SSH not available within ${TIMEOUT_SSH}s"
     sleep 5
 done
+SSH_UP=1
 log "SSH up"
 
 # ── Wait for firstboot sentinel ───────────────────────────────────────────────
