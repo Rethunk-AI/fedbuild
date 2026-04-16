@@ -76,7 +76,9 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	sudo image-builder build              \
 		--distro     fedora-43            \
 		--blueprint  $(BLUEPRINT_EFFECTIVE) \
-		--extra-repo $(REPODIR)           \
+		--extra-repo file://$(REPODIR)    \
+		--extra-repo https://packages.microsoft.com/yumrepos/vscode \
+		--extra-repo https://pkg.cloudflare.com/cloudflared/rpm \
 		--output-dir $(OUTDIR)            \
 		minimal-raw-zst
 	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
