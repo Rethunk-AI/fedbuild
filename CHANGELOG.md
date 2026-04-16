@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Image-size budget with bless-size
 - Brewfile replaces per-pkg install loop
 - Diff-packages drift report
+- Git-cliff automation + make changelog
 
 ### CI
 - Pin actionlint to v1.7.7; expand cache key to blueprint+spec
@@ -25,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sync brew formula list with firstboot.sh
 - Backfill 0.2.0 and 0.3.0 entries
 - Add CI section, baked agent files, missing make targets
+- Reconcile AGENTS/HUMANS/CONTRIBUTING for new targets
+- Refresh with supply-chain summary + doc map
 
 ### Fixed
 - Clean repo dir before rebuilding

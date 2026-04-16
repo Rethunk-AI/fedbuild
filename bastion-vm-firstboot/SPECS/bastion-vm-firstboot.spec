@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
@@ -64,6 +64,13 @@ install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 %{_datadir}/%{name}/Brewfile
 
 %changelog
+* Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.4.0-1
+- Brewfile replaces per-package brew install loop in firstboot
+- Reproducible RPM via SOURCE_DATE_EPOCH (byte-identical builds)
+- Image size budget (tests/size.baseline) + bless-size target
+- make diff-packages: declared vs installed drift report
+- make changelog: git-cliff automation from Conventional Commits
+
 * Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.3.0-1
 - Add jq, yq, sqlite, buildah, skopeo to blueprint
 
