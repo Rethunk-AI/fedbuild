@@ -1,0 +1,3 @@
+# Allow the coding-agent user to run any command without a password.
+# This VM has no external IP — passwordless sudo is intentional.
+user ALL=(ALL) NOPASSWD: ALL

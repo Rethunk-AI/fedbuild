@@ -1,0 +1,18 @@
+[Unit]
+Description=Bastion VM first-boot setup (Homebrew + dev tools)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/bastion-vm-firstboot/done
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+User=user
+ExecStart=/usr/libexec/bastion-vm-firstboot/firstboot.sh
+ExecStartPost=/usr/bin/touch /var/lib/bastion-vm-firstboot/done
+StandardOutput=journal+console
+StandardError=journal+console
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
