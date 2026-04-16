@@ -1,0 +1,25 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-04-16
+
+### Added
+- `bastion-vm-firstboot` RPM: systemd oneshot service installs Homebrew and dev tools on first boot
+- `fedora-43-devbox` osbuild blueprint: Fedora 43 VM with 40+ packages, VS Code, cloudflared
+- Claude Code agent configuration baked into `~/.claude/` via firstboot (`CLAUDE.md` + `settings.json`)
+- `make smoke` target: QEMU/KVM integration test — boots image, SSHes in, asserts tools + firstboot
+- GitHub Actions CI: shellcheck + TOML lint + actionlint + RPM build + rpmlint
+- Issue templates (bug report, feature request) and PR template
+- Documentation: `HUMANS.md` (human guide), `AGENTS.md` (agent reference), `SECURITY.md`, `CONTRIBUTING.md`
+
+### Architecture
+- `blueprint.toml`: osbuild blueprint with always-update (`version = "*"`) package policy
+- `bastion-vm-firstboot/`: RPM package — firstboot service + profile.d + sudoers
+- `Makefile`: `rpm → repo → image` build chain with `check`, `lint`, `validate`, `smoke` targets
+- `keys/authorized_key`: SSH public key (gitignored), substituted at build time into `blueprint.effective.toml`
