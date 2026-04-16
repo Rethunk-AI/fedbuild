@@ -38,8 +38,15 @@ dump_serial() {
     tail -n 80 "$SERIAL_LOG" | sed 's/^/[serial] /'
 }
 
+dump_qemu() {
+    [[ -s "${QEMU_LOG:-}" ]] || return
+    log "QEMU stderr ($QEMU_LOG):"
+    sed 's/^/[qemu] /' "$QEMU_LOG"
+}
+
 die() {
     echo "[smoke] ERROR: $*" >&2
+    dump_qemu
     dump_serial
     dump_journal
     exit 1
@@ -63,9 +70,12 @@ log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
 zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
 
 SERIAL_LOG="${SERIAL_LOG:-$OUTDIR/smoke-serial.log}"
+QEMU_LOG="${QEMU_LOG:-$OUTDIR/smoke-qemu.log}"
 mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
+: > "$QEMU_LOG"
 log "Serial console → $SERIAL_LOG"
+log "QEMU stderr    → $QEMU_LOG"
 
 # ── Boot VM ───────────────────────────────────────────────────────────────────
 log "Booting VM (SSH forwarded to localhost:$SSH_PORT)"
@@ -79,12 +89,18 @@ qemu-system-x86_64 \
     -display none \
     -serial "file:$SERIAL_LOG" \
     -monitor none \
-    -daemonize \
-    -pidfile /tmp/smoke-qemu.pid
-
-QEMU_PID=$(cat /tmp/smoke-qemu.pid)
-rm -f /tmp/smoke-qemu.pid
+    >"$QEMU_LOG" 2>&1 &
+QEMU_PID=$!
 log "QEMU PID $QEMU_PID"
+
+# Give QEMU a moment to exec; if it died immediately, surface the error now.
+sleep 2
+if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+    wait "$QEMU_PID" 2>/dev/null || true
+    dump_qemu
+    dump_serial
+    die "QEMU exited before VM came up"
+fi
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$SSH_KEY" -p "$SSH_PORT" user@localhost)
 
