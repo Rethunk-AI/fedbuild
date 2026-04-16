@@ -17,16 +17,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install build deps
-        run: dnf install -y --setopt=install_weak_deps=False shellcheck rpmlint rpm-build make
+        run: dnf install -y --setopt=install_weak_deps=False actionlint shellcheck rpmlint rpm-build make
 
-      - name: shellcheck
-        run: make shellcheck
+      - name: Check (shellcheck + TOML + actionlint)
+        run: make check
 
       - name: Build RPM
         run: make rpm
 
       - name: rpmlint
         run: make lint
-
-      - name: Blueprint TOML syntax
-        run: python3 -c "import tomllib; tomllib.load(open('blueprint.toml', 'rb'))" && echo "OK"
