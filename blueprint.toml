@@ -77,6 +77,9 @@ groups = ["wheel"]
 
 [customizations.services]
 enabled = ["sshd", "bastion-vm-firstboot"]
+# initial-setup is Anaconda's interactive first-boot TUI; it blocks headless
+# boot waiting for input even when the user is pre-created by the blueprint.
+disabled = ["initial-setup"]
 
 [customizations.locale]
 languages = ["en_US.UTF-8"]
