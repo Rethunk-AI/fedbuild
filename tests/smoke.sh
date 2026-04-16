@@ -53,7 +53,7 @@ cleanup() {
 trap cleanup EXIT
 
 log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
-zstd -d --quiet "$IMAGE" -o "$TMPIMAGE"
+zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
 
 # ── Boot VM ───────────────────────────────────────────────────────────────────
 log "Booting VM (SSH forwarded to localhost:$SSH_PORT)"
