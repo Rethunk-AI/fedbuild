@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check lint shellcheck validate
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions lint shellcheck validate
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -65,10 +65,20 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		minimal-raw-zst
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
-check:
+check: check-versions
 	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh
 	@python3 -c "import tomllib; tomllib.load(open('$(BLUEPRINT)', 'rb'))" && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
+
+## check-versions: assert RPM spec Version and blueprint version match
+check-versions:
+	@spec_ver=$$(sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE)); \
+	 bp_ver=$$(python3 -c "import tomllib; print(tomllib.load(open('$(BLUEPRINT)','rb'))['version'])"); \
+	 if [ "$$spec_ver" != "$$bp_ver" ]; then \
+	     echo "ERROR: version mismatch — spec=$$spec_ver blueprint=$$bp_ver"; exit 1; \
+	 else \
+	     echo "Versions match: $$spec_ver"; \
+	 fi
 
 ## shellcheck: lint all shell scripts in SOURCES and tests/
 shellcheck:

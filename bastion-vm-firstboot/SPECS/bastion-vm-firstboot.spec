@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
@@ -56,6 +56,10 @@ install -d %{buildroot}%{_localstatedir}/lib/%{name}
 %{_sysconfdir}/sudoers.d/user
 
 %changelog
+* Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.2.0-1
+- Sync version to blueprint 0.2.0
+- Add BuildRequires: systemd-rpm-macros
+
 * Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.1.0-1
 - Bake Claude Code agent configuration into ~/.claude/ via firstboot
 - Add CHANGELOG.md; reset versions to 0.1.0
