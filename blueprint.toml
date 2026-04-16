@@ -49,14 +49,13 @@ packages = [
     { name = "gh",             version = "*" },
     { name = "ShellCheck",     version = "*" },
     { name = "helm",           version = "*" },
-    { name = "azure-cli",      version = "*" },
 
     # --- from external repos (see [[customizations.repositories]] below) ---
     { name = "code",           version = "*" },   # VS Code stable — includes 'code' CLI
     { name = "code-insiders",  version = "*" },
     { name = "cloudflared",    version = "*" },
 
-    # --- first-boot: Homebrew + actionlint, buf, kubectl, ollama, semgrep,
+    # --- first-boot: Homebrew + actionlint, buf, kubectl, semgrep,
     #                 stripe-cli, supabase, uv, watchexec
     #                 AI CLIs: @anthropic-ai/claude-code, @google/gemini-cli (npm)
     #                 + /etc/profile.d/devbox.sh + /etc/sudoers.d/user

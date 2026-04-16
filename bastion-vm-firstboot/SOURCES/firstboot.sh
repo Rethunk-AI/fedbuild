@@ -110,7 +110,7 @@ Installed via RPM / Homebrew / npm — use these, don't install ad-hoc:
 | Category | Tools |
 |----------|-------|
 | VCS | git, gh |
-| Runtimes | go, node, bun, yarn, uv (Python), cargo |
+| Runtimes | go, node, bun, yarn, uv (Python) |
 | Search | rg, fd, tokei |
 | Containers | podman, kubectl, helm |
 | AI CLIs | claude, gemini |
@@ -142,7 +142,6 @@ cat > ~/.claude/settings.json << 'SETTINGS'
       "Bash(npx *)",
       "Bash(node *)",
       "Bash(go *)",
-      "Bash(cargo *)",
       "Bash(uv *)",
       "Bash(python3 *)",
       "Bash(bun *)",

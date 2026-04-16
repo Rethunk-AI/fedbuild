@@ -19,7 +19,7 @@ Runs once on first boot (as the 'user' account) to install Homebrew
 and the development tools that are either bleeding-edge or have no
 signed RPM repo with an always-update URL:
 
-  actionlint, buf, kubernetes-cli, ollama, semgrep,
+  actionlint, buf, kubernetes-cli, semgrep,
   stripe-cli, supabase, uv, watchexec
 
   (cloudflared is installed from its RPM repo and is NOT handled here.
