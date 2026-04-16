@@ -21,6 +21,11 @@ indent_size = 4
 indent_style = space
 indent_size = 4
 
+# YAML — GitHub Actions workflows
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
 # RPM spec files
 [*.spec]
 indent_style = space
