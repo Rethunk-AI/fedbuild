@@ -43,6 +43,7 @@ rpm: $(RPM)
 $(REPO_MARKER): $(RPM)
 	@command -v createrepo >/dev/null 2>&1 || \
 		{ echo "createrepo_c not found — run: make deps"; exit 1; }
+	rm -rf $(REPODIR)
 	mkdir -p $(REPODIR)
 	cp -v $(RPM) $(REPODIR)/
 	createrepo $(REPODIR)
