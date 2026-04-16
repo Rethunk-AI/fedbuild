@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image clean distclean help lint shellcheck validate
+.PHONY: all deps rpm repo image clean distclean help check lint shellcheck validate
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -63,6 +63,12 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		--extra-repo $(REPODIR)           \
 		--output-dir $(OUTDIR)            \
 		minimal-raw-zst
+
+## check: fast pre-push checks — shellcheck, TOML syntax, actionlint (no RPM build)
+check:
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh
+	@python3 -c "import tomllib; tomllib.load(open('$(BLUEPRINT)', 'rb'))" && echo "blueprint.toml: OK"
+	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
 ## shellcheck: lint all shell scripts in SOURCES
 shellcheck:

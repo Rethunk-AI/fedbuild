@@ -29,6 +29,7 @@ make image
 | `make` / `make repo` | Build RPM and index local yum repo |
 | `make rpm` | Build RPM only |
 | `make image` | Build Fedora 43 VM image |
+| `make check` | Fast pre-push: shellcheck + TOML syntax + actionlint |
 | `make shellcheck` | Lint shell scripts |
 | `make lint` | Run rpmlint on built RPM |
 | `make validate` | Check TOML syntax, SSH key, image-builder target |

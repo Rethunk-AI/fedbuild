@@ -10,6 +10,7 @@ make             # build RPM + local yum repo (default)
 make rpm         # build bastion-vm-firstboot RPM only
 make repo        # copy RPM into repo/ and run createrepo
 make image       # build Fedora 43 VM image (requires sudo + SSH key set)
+make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM build)
 make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
