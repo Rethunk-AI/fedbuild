@@ -11,6 +11,7 @@ make rpm         # build bastion-vm-firstboot RPM only
 make repo        # copy RPM into repo/ and run createrepo
 make image       # build Fedora 43 VM image (requires sudo + SSH key set)
 make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM build)
+make check-versions  # assert spec Version matches blueprint version field
 make shellcheck  # shellcheck all shell scripts in SOURCES
 make lint        # rpmlint on built RPM
 make validate    # check TOML syntax + SSH key + image-builder target
@@ -18,6 +19,7 @@ make smoke       # boot VM in QEMU/KVM and assert firstboot + tool presence (req
 make clean       # rm rpmbuild/ and repo/
 make distclean   # clean + rm output/
 make deps        # install createrepo_c if missing
+make help        # print target descriptions
 ```
 
 ## Architecture
@@ -30,12 +32,17 @@ fedbuild/
     SPECS/bastion-vm-firstboot.spec       # RPM spec
     SOURCES/
       firstboot.sh                        # runs on first boot as 'user', installs Homebrew + tools
-                                          #   also writes ~/.claude/CLAUDE.md + settings.json
       bastion-vm-firstboot.service        # systemd oneshot, User=user, TimeoutStartSec=infinity
       devbox-profile.sh → /etc/profile.d/devbox.sh   # GOPATH, PATH, Homebrew shellenv
       user-sudoers → /etc/sudoers.d/user  # NOPASSWD: ALL (intentional, no external IP)
+      agent-claude.md → ~user/.claude/CLAUDE.md      # baked agent instructions (copied by firstboot)
+      agent-settings.json → ~user/.claude/settings.json  # baked agent settings
   tests/
     smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
+  keys/
+    authorized_key                        # SSH pubkey (gitignored) — required by `make image`
+  .github/workflows/
+    ci.yml                                # fedora:43 lint: shellcheck + rpmlint + actionlint + TOML
   repo/                                   # local yum repo (createrepo output), passed via --extra-repo
   rpmbuild/                               # rpmbuild working tree
   output/                                 # built VM images
@@ -71,3 +78,14 @@ Agent can override per-repo: `git config user.name / user.email`
 - blueprint `version` field is semver string, bump it on each change for traceability
 - `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
 - `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
+
+## CI
+
+`.github/workflows/ci.yml` runs on push/PR to `main` in `fedora:43` container:
+- shellcheck (all `SOURCES/*.sh`)
+- rpmlint (built RPM)
+- actionlint (pinned v1.7.7)
+- TOML syntax (`yq`)
+- `make check-versions` (spec ↔ blueprint parity)
+
+Local equivalent: `make check`.
