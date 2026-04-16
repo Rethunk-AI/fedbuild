@@ -16,14 +16,13 @@ Source2:        devbox-profile.sh
 Source3:        user-sudoers
 Source4:        agent-claude.md
 Source5:        agent-settings.json
+Source6:        Brewfile
 
 %description
 Runs once on first boot (as the 'user' account) to install Homebrew
-and the development tools that are either bleeding-edge or have no
-signed RPM repo with an always-update URL:
-
-  actionlint, buf, kubernetes-cli, semgrep,
-  stripe-cli, supabase, uv, watchexec
+and the development tools listed in the shipped Brewfile (formulae
+that are bleeding-edge or have no signed RPM repo with an
+always-update URL).
 
   (cloudflared is installed from its RPM repo and is NOT handled here.
   kubectl/kubernetes-cli uses brew because pkgs.k8s.io requires a
@@ -41,6 +40,7 @@ install -Dm440 %{SOURCE3} %{buildroot}%{_sysconfdir}/sudoers.d/user
 install -d %{buildroot}%{_localstatedir}/lib/%{name}
 install -Dm644 %{SOURCE4} %{buildroot}%{_datadir}/%{name}/agent-claude.md
 install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
+install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 
 %post
 %systemd_post %{name}.service
@@ -61,6 +61,7 @@ install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 %dir %{_datadir}/%{name}
 %{_datadir}/%{name}/agent-claude.md
 %{_datadir}/%{name}/agent-settings.json
+%{_datadir}/%{name}/Brewfile
 
 %changelog
 * Wed Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.3.0-1

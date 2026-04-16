@@ -1,16 +1,11 @@
 #!/bin/bash
 # bastion-vm-firstboot — runs once on first boot as the 'user' account.
-# Installs Homebrew and the dev tools that have no RPM (system or external repo).
+# Installs Homebrew + formulae from /usr/share/bastion-vm-firstboot/Brewfile,
+# corepack (yarn v4), and AI CLI npm globals (claude, gemini).
 #
-# Packages already handled by RPM repos (not listed here):
-#   cloudflared  → pkg.cloudflare.com/cloudflared/rpm  (signed)
-#   code         → packages.microsoft.com/yumrepos/vscode (signed)
-#
-# kubectl is intentionally installed via brew (kubernetes-cli) rather than
-# pkgs.k8s.io because that repo requires a pinned minor version in its URL,
-# which would break the always-update policy of this image.
-#
-# AI CLI tools (claude, gemini) installed via npm — no signed RPM repo exists.
+# RPM repos handle: cloudflared, code/code-insiders (both signed).
+# Brew handles formulae that lack a signed always-update RPM source; see Brewfile.
+# npm handles AI CLIs (no signed RPM repo exists upstream).
 set -euo pipefail
 
 SENTINEL_DIR=/var/lib/bastion-vm-firstboot
@@ -50,31 +45,17 @@ log "Homebrew $(brew --version | head -1)"
 log "Updating Homebrew formulae"
 brew update
 
-# ── Brew formulae — bleeding-edge or no signed RPM repo ───────────────────────
-# stripe-cli: Stripe's RPM is on a third-party JFrog instance with gpgcheck=0
-#             and is not a Stripe-owned domain — brew is safer.
+# ── Brew formulae via Brewfile ────────────────────────────────────────────────
+# Single source of truth shipped by the RPM; diffable, one place to add/remove.
 FAILED=()
-
-brew_install() {
-    local pkg="$1"
-    log "Installing $pkg"
-    if brew install "$pkg"; then
-        log "$pkg OK"
-    else
-        log "ERROR: $pkg failed"
-        FAILED+=("brew:$pkg")
-    fi
-}
-
-brew_install actionlint
-brew_install buf
-brew_install kubernetes-cli
-brew_install oven-sh/bun/bun
-brew_install semgrep
-brew_install uv
-brew_install watchexec
-brew_install stripe/stripe-cli/stripe
-brew_install supabase/tap/supabase
+BREWFILE=/usr/share/bastion-vm-firstboot/Brewfile
+log "Running brew bundle --file=$BREWFILE"
+if brew bundle --file="$BREWFILE" --no-lock; then
+    log "brew bundle OK"
+else
+    log "ERROR: brew bundle reported failures"
+    FAILED+=("brew:bundle")
+fi
 
 # ── Yarn v4 Berry via corepack ────────────────────────────────────────────────
 # corepack ships with Node.js; 'enable' installs yarn/pnpm shims system-wide

@@ -1,0 +1,18 @@
+# Brewfile — consumed by `brew bundle` in firstboot.sh.
+#
+# Why brew (not RPM) for these:
+#   - bleeding-edge (actionlint, buf, semgrep, uv, watchexec)
+#   - no signed RPM repo with always-update URL (kubernetes-cli, supabase)
+#   - upstream's only supported install path (stripe-cli, supabase)
+#
+# Ordering preserves prior firstboot install order for reproducible log output.
+
+brew "actionlint"
+brew "buf"
+brew "kubernetes-cli"
+brew "oven-sh/bun/bun"
+brew "semgrep"
+brew "uv"
+brew "watchexec"
+brew "stripe/stripe-cli/stripe"
+brew "supabase/tap/supabase"

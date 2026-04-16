@@ -46,6 +46,7 @@ fedbuild/
       user-sudoers → /etc/sudoers.d/user  # NOPASSWD: ALL (intentional, no external IP)
       agent-claude.md → ~user/.claude/CLAUDE.md      # baked agent instructions (copied by firstboot)
       agent-settings.json → ~user/.claude/settings.json  # baked agent settings
+      Brewfile → /usr/share/bastion-vm-firstboot/Brewfile  # brew formulae list (brew bundle)
   tests/
     smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
     size.baseline                         # image-size budget baseline (bytes, raw.zst)
