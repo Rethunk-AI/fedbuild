@@ -46,15 +46,6 @@ osbuild blueprint TOML — reference: https://osbuild.org/docs/user-guide/bluepr
 - `[[customizations.files]]` inlines file content as escaped string in `data =`
 - `[[customizations.repositories]]` wires external RPM repos at image-build time
 
-## Package Decisions
-
-| Package | Source | Why not RPM |
-|---------|--------|-------------|
-| kubectl (kubernetes-cli) | brew | pkgs.k8s.io URL requires minor-version pin — breaks always-update policy |
-| stripe-cli | brew | Stripe's RPM on third-party JFrog with `gpgcheck=0`, not Stripe-owned domain |
-| actionlint, buf, semgrep, uv, watchexec, ollama, supabase | brew | No signed RPM repo / bleeding-edge needed |
-| azure-cli | Fedora repo | Available in official `updates` repo — no custom repo needed |
-
 ## Git Identity
 
 Image bakes `/etc/gitconfig` via `[[customizations.files]]`:
