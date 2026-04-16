@@ -58,7 +58,6 @@ brew_install uv
 brew_install watchexec
 brew_install stripe/stripe-cli/stripe
 brew_install supabase/tap/supabase
-brew_install ollama
 
 # ── Yarn v4 Berry via corepack ────────────────────────────────────────────────
 # corepack ships with Node.js; 'enable' installs yarn/pnpm shims system-wide
@@ -116,7 +115,7 @@ Installed via RPM / Homebrew / npm — use these, don't install ad-hoc:
 | Containers | podman, kubectl, helm |
 | AI CLIs | claude, gemini |
 | Linters | shellcheck, actionlint, semgrep, buf |
-| Cloud | stripe, supabase, cloudflared, ollama |
+| Cloud | stripe, supabase, cloudflared |
 
 ## Git Identity
 
@@ -160,8 +159,7 @@ cat > ~/.claude/settings.json << 'SETTINGS'
       "Bash(shellcheck *)",
       "Bash(buf *)",
       "Bash(stripe *)",
-      "Bash(supabase *)",
-      "Bash(ollama *)"
+      "Bash(supabase *)"
     ]
   }
 }
