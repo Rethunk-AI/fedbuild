@@ -86,7 +86,7 @@ keyboard = "us"
 timezone = "UTC"
 
 [customizations.kernel]
-append = "quiet"
+append = "console=ttyS0,115200 console=tty0"
 
 # single root partition — no LVM, no split mounts
 [[customizations.filesystem]]

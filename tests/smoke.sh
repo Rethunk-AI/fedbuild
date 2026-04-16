@@ -32,8 +32,15 @@ dump_journal() {
         > "$FAIL_LOG" 2>&1 || log "  (journal capture failed)"
 }
 
+dump_serial() {
+    [[ -s "${SERIAL_LOG:-}" ]] || { log "No serial output captured"; return; }
+    log "Last 80 lines of serial console ($SERIAL_LOG):"
+    tail -n 80 "$SERIAL_LOG" | sed 's/^/[serial] /'
+}
+
 die() {
     echo "[smoke] ERROR: $*" >&2
+    dump_serial
     dump_journal
     exit 1
 }
@@ -55,6 +62,11 @@ trap cleanup EXIT
 log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
 zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
 
+SERIAL_LOG="${SERIAL_LOG:-$OUTDIR/smoke-serial.log}"
+mkdir -p "$(dirname "$SERIAL_LOG")"
+: > "$SERIAL_LOG"
+log "Serial console → $SERIAL_LOG"
+
 # ── Boot VM ───────────────────────────────────────────────────────────────────
 log "Booting VM (SSH forwarded to localhost:$SSH_PORT)"
 qemu-system-x86_64 \
@@ -65,7 +77,7 @@ qemu-system-x86_64 \
     -net nic,model=virtio \
     -net "user,hostfwd=tcp::${SSH_PORT}-:22" \
     -display none \
-    -serial none \
+    -serial "file:$SERIAL_LOG" \
     -monitor none \
     -daemonize \
     -pidfile /tmp/smoke-qemu.pid
