@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -228,6 +228,13 @@ bump-major:
 	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
 	 echo "Bumped $$cur → $$new"; \
 	 $(MAKE) --no-print-directory check-versions
+
+## changelog: regenerate CHANGELOG.md from Conventional Commits (via git-cliff + cliff.toml)
+changelog:
+	@command -v git-cliff >/dev/null 2>&1 || \
+		{ echo "ERROR: git-cliff not found — brew install git-cliff"; exit 1; }
+	git-cliff --config $(FEDBUILD)/cliff.toml --output $(FEDBUILD)/CHANGELOG.md
+	@echo "Regenerated CHANGELOG.md"
 
 ## install-hooks: install pre-commit hooks from .pre-commit-config.yaml
 install-hooks:

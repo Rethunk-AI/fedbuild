@@ -29,6 +29,7 @@ make bump-patch  # bump Z in X.Y.Z (spec + blueprint lockstep) → runs check-ve
 make bump-minor  # bump Y, reset Z=0
 make bump-major  # bump X, reset Y=0, Z=0
 make install-hooks  # install pre-commit hooks (requires pip install pre-commit)
+make changelog      # regenerate CHANGELOG.md from Conventional Commits (needs brew install git-cliff)
 make help        # print target descriptions
 ```
 
@@ -59,6 +60,7 @@ fedbuild/
   schemas/
     agent-settings.schema.json            # JSON Schema (2020-12) for baked ~/.claude/settings.json
   .pre-commit-config.yaml                 # local hooks mirroring `make check`; install: make install-hooks
+  cliff.toml                              # git-cliff config for `make changelog`
   repo/                                   # local yum repo (createrepo output), passed via --extra-repo
   rpmbuild/                               # rpmbuild working tree
   output/                                 # built VM images
