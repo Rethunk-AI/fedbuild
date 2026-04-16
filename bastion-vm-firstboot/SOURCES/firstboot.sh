@@ -42,6 +42,7 @@ if ! command -v brew &>/dev/null; then
     NONINTERACTIVE=1 bash "$_brew_installer"
     rm -f "$_brew_installer"
     trap - EXIT
+    trap on_exit EXIT  # re-register after brew installer cleanup removed it
 fi
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -54,13 +55,16 @@ brew update
 # ── Brew formulae — bleeding-edge or no signed RPM repo ───────────────────────
 # stripe-cli: Stripe's RPM is on a third-party JFrog instance with gpgcheck=0
 #             and is not a Stripe-owned domain — brew is safer.
+FAILED=()
+
 brew_install() {
     local pkg="$1"
     log "Installing $pkg"
     if brew install "$pkg"; then
         log "$pkg OK"
     else
-        log "WARNING: $pkg failed — continuing"
+        log "ERROR: $pkg failed"
+        FAILED+=("brew:$pkg")
     fi
 }
 
@@ -84,10 +88,12 @@ if sudo corepack enable; then
     if corepack prepare yarn@stable --activate; then
         log "Yarn $(yarn --version) active"
     else
-        log "WARNING: corepack prepare yarn@stable failed — continuing"
+        log "ERROR: corepack prepare yarn@stable failed"
+        FAILED+=("corepack:yarn@stable")
     fi
 else
-    log "WARNING: corepack enable failed — continuing"
+    log "ERROR: corepack enable failed"
+    FAILED+=("corepack:enable")
 fi
 
 # ── npm globals — AI CLI tools with no signed RPM repo ────────────────────────
@@ -97,7 +103,8 @@ npm_install_global() {
     if npm install -g "$pkg"; then
         log "$pkg OK"
     else
-        log "WARNING: $pkg npm install failed — continuing"
+        log "ERROR: $pkg npm install failed"
+        FAILED+=("npm:$pkg")
     fi
 }
 
@@ -186,5 +193,10 @@ cat > ~/.claude/settings.json << 'SETTINGS'
 SETTINGS
 
 log "Claude Code configuration written to ~/.claude/"
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+    log "FAILED installs: ${FAILED[*]}"
+    exit 1
+fi
 
 log "Done"
