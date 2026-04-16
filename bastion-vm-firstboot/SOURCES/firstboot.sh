@@ -39,7 +39,11 @@ brew update
 brew_install() {
     local pkg="$1"
     log "Installing $pkg"
-    brew install "$pkg" && log "$pkg OK" || log "WARNING: $pkg failed — continuing"
+    if brew install "$pkg"; then
+        log "$pkg OK"
+    else
+        log "WARNING: $pkg failed — continuing"
+    fi
 }
 
 brew_install actionlint

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # /etc/profile.d/devbox.sh — environment for coding-agent VM
 # Applied to all login shells.
 

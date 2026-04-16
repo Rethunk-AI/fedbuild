@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image clean distclean help lint validate
+.PHONY: all deps rpm repo image clean distclean help lint shellcheck validate
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -63,6 +63,10 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		--extra-repo $(REPODIR)           \
 		--output-dir $(OUTDIR)            \
 		minimal-raw-zst
+
+## shellcheck: lint all shell scripts in SOURCES
+shellcheck:
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
