@@ -64,7 +64,7 @@ qemu-system-x86_64 \
     -drive "file=$TMPIMAGE,format=raw,if=virtio" \
     -net nic,model=virtio \
     -net "user,hostfwd=tcp::${SSH_PORT}-:22" \
-    -nographic \
+    -display none \
     -serial none \
     -monitor none \
     -daemonize \
