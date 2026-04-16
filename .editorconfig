@@ -1,0 +1,31 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Makefile requires hard tabs
+[Makefile]
+indent_style = tab
+indent_size = 4
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 4
+
+# TOML — blueprint and config files
+[*.toml]
+indent_style = space
+indent_size = 4
+
+# RPM spec files
+[*.spec]
+indent_style = space
+indent_size = 4
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false

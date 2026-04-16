@@ -1,0 +1,23 @@
+# Normalize line endings on checkout
+* text=auto
+
+# Shell scripts always LF
+*.sh text eol=lf
+
+# Makefile always LF
+Makefile text eol=lf
+
+# Spec and TOML always LF
+*.spec text eol=lf
+*.toml text eol=lf
+
+# Binary artifacts — no line-ending normalization, no diffs
+*.rpm binary
+*.zst binary
+*.raw binary
+
+# GitHub linguist — classify repo as Shell + Makefile + TOML (not HTML/vendored)
+repo/** linguist-vendored
+rpmbuild/** linguist-vendored
+output/** linguist-vendored
+fedora-43-minimal-raw-zst-x86_64/** linguist-vendored
