@@ -36,7 +36,7 @@ make image
 
 The `bastion-vm-firstboot` service runs once as `user` and installs via Homebrew:
 
-`actionlint`, `buf`, `kubectl`, `ollama`, `semgrep`, `stripe-cli`, `supabase`, `uv`, `watchexec`
+`actionlint`, `buf`, `bun`, `kubectl`, `semgrep`, `stripe-cli`, `supabase`, `uv`, `watchexec`
 
 AI coding CLIs via npm: `@anthropic-ai/claude-code`, `@google/gemini-cli`
 
