@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify bump-patch bump-minor bump-major
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -188,6 +188,13 @@ bump-major:
 	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
 	 echo "Bumped $$cur → $$new"; \
 	 $(MAKE) --no-print-directory check-versions
+
+## install-hooks: install pre-commit hooks from .pre-commit-config.yaml
+install-hooks:
+	@command -v pre-commit >/dev/null 2>&1 || \
+		{ echo "ERROR: pre-commit not found — pip install pre-commit"; exit 1; }
+	pre-commit install
+	@echo "Installed → .git/hooks/pre-commit"
 
 ## help: list available targets
 help:

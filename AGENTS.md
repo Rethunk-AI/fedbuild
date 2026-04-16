@@ -25,6 +25,7 @@ make deps        # install createrepo_c if missing
 make bump-patch  # bump Z in X.Y.Z (spec + blueprint lockstep) → runs check-versions
 make bump-minor  # bump Y, reset Z=0
 make bump-major  # bump X, reset Y=0, Z=0
+make install-hooks  # install pre-commit hooks (requires pip install pre-commit)
 make help        # print target descriptions
 ```
 
@@ -51,6 +52,7 @@ fedbuild/
     ci.yml                                # fedora:43 lint: shellcheck + rpmlint + actionlint + TOML
   schemas/
     agent-settings.schema.json            # JSON Schema (2020-12) for baked ~/.claude/settings.json
+  .pre-commit-config.yaml                 # local hooks mirroring `make check`; install: make install-hooks
   repo/                                   # local yum repo (createrepo output), passed via --extra-repo
   rpmbuild/                               # rpmbuild working tree
   output/                                 # built VM images

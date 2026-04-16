@@ -1,0 +1,39 @@
+---
+# Mirrors CI `make check`. Install: `make install-hooks` (requires `pre-commit`).
+# Skip a run: `SKIP=<hook-id> git commit ...` or `git commit --no-verify` (discouraged).
+
+repos:
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        files: ^(bastion-vm-firstboot/SOURCES/.*\.sh|tests/.*\.sh)$
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.33.0
+    hooks:
+      - id: check-jsonschema
+        name: agent-settings.json schema
+        files: ^bastion-vm-firstboot/SOURCES/agent-settings\.json$
+        args: [--schemafile, schemas/agent-settings.schema.json]
+
+  - repo: local
+    hooks:
+      - id: make-check-versions
+        name: spec ↔ blueprint version parity
+        entry: make check-versions
+        language: system
+        pass_filenames: false
+        files: ^(blueprint\.toml|bastion-vm-firstboot/SPECS/.*\.spec)$
+
+      - id: blueprint-toml-syntax
+        name: blueprint.toml syntax (yq)
+        entry: bash -c 'yq -p toml -oy "." blueprint.toml > /dev/null'
+        language: system
+        pass_filenames: false
+        files: ^blueprint\.toml$
