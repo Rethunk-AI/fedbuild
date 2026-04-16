@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image clean distclean help check lint shellcheck validate
+.PHONY: all deps rpm repo image smoke clean distclean help check lint shellcheck validate
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -89,6 +89,13 @@ validate: $(BLUEPRINT_EFFECTIVE)
 	@echo "Checking target image type..."
 	@image-builder list 2>/dev/null | grep -q 'fedora-43.*minimal-raw-zst.*x86_64' && echo "  OK" || \
 		{ echo "  ERROR: fedora-43 minimal-raw-zst x86_64 not found in image-builder list"; exit 1; }
+
+## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
+smoke:
+	@test -d $(OUTDIR) || { echo "ERROR: output/ not found — run: make image first"; exit 1; }
+	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
+		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
+	bash tests/smoke.sh $(OUTDIR)
 
 ## clean: remove rpmbuild tree, local repo, and effective blueprint
 clean:
