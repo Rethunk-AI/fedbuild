@@ -168,19 +168,21 @@ done
 # ── Log installed versions ────────────────────────────────────────────────────
 # Captures actual version strings so partial/stale installs are visible in CI.
 log "Logging installed versions"
+# log_version <label> <remote-cmd> — runs remote-cmd via SSH, logs first non-empty line.
+# Per-tool cmd lets us handle flag quirks (go version, semgrep --version to stderr, etc.).
 log_version() {
-    local tool="$1" actual
+    local label="$1" cmd="$2" actual
     # shellcheck disable=SC2029
-    actual=$(ssh "${SSH_OPTS[@]}" "$tool --version 2>&1 | head -1" 2>/dev/null) || actual="<error>"
-    log "  $tool: ${actual:-<no output>}"
+    actual=$(ssh "${SSH_OPTS[@]}" "$cmd 2>&1 | awk 'NF{print;exit}'" 2>/dev/null) || actual="<error>"
+    log "  $label: ${actual:-<no output>}"
 }
-log_version claude
-log_version node
-log_version go
-log_version buf
-log_version semgrep
-log_version actionlint
-log_version gemini
+log_version claude     'claude --version'
+log_version node       'node --version'
+log_version go         'go version'
+log_version buf        'buf --version'
+log_version semgrep    'semgrep --version'
+log_version actionlint 'actionlint -version'
+log_version gemini     'gemini --version'
 
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"
