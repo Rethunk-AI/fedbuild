@@ -31,6 +31,10 @@ make bump-major  # bump X, reset Y=0, Z=0
 make install-hooks  # install pre-commit hooks (requires pip install pre-commit)
 make changelog      # regenerate CHANGELOG.md from Conventional Commits (needs brew install git-cliff)
 make help        # print target descriptions
+make sbom        # generate syft SBOM (CycloneDX JSON + SPDX) from built image → output/
+make attest      # cosign attest-blob SLSA v1 provenance for image (requires OIDC session)
+make smoke-rerun # re-run smoke test against existing image without rebuilding
+make baseline-record  # append build/boot timing row to tests/baselines.csv (run after make smoke)
 ```
 
 ## Architecture
@@ -100,6 +104,10 @@ Agent can override per-repo: `git config user.name / user.email`
 - Brew formulae list lives in `SOURCES/Brewfile` (consumed by `brew bundle` in firstboot) — do not hardcode brew packages in `firstboot.sh`
 - `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
 - smoke failures: if SSH came up, firstboot journal is captured to `$OUTDIR/smoke-fail.log` (override via `FAIL_LOG=...`)
+- `tests/baselines.csv` records per-commit build/boot timing; commit it alongside `tests/size.baseline` after blessing
+- `Brewfile.lock.json` dumped post-firstboot is a record of what installed, NOT a pin — next boot re-resolves `latest`
+- `auditd` root-exec rule covers euid=0 only; firstboot/brew/agent activity (as `user`) is not audited
+- SLSA provenance (`make attest`) is Build L1 — no hardened builder; authenticates artifact identity, not build isolation
 
 ## CI
 
