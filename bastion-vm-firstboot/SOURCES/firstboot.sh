@@ -158,6 +158,24 @@ if ! brew bundle check --file="$BREWFILE" >/dev/null 2>&1; then
         FAILED+=("brew:bundle:check")
     fi
 fi
+
+# Dump a post-install record of what landed this boot.
+# THIS IS A RECORD, NOT A PIN — next boot still pulls "latest" unless
+# `brew bundle --frozen` is used. Name keeps `.json` suffix for convention
+# though `brew bundle dump` emits Brewfile-format text, not JSON.
+# Only run if the bundle succeeded — otherwise the dump reflects a partial
+# install and misleads drift diffs.
+if [[ ${#FAILED[@]} -eq 0 ]]; then
+    log "Dumping Brewfile.lock.json (post-install record)"
+    _lock_tmp=$(mktemp /tmp/Brewfile.lock.XXXXXX)
+    if brew bundle dump --file="$_lock_tmp" --force; then
+        sudo install -m 0644 "$_lock_tmp" "${SENTINEL_DIR}/Brewfile.lock.json"
+        log "Brewfile.lock.json written to ${SENTINEL_DIR}/Brewfile.lock.json"
+    else
+        log "WARN: brew bundle dump failed — lock record not written"
+    fi
+    rm -f "$_lock_tmp"
+fi
 section_end
 
 # ── Go workspace ──────────────────────────────────────────────────────────────
