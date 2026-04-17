@@ -287,6 +287,23 @@ if [[ "$selinux_policy" != "targeted" ]]; then
     FAIL=1
     status "✗" "SELinux policy != targeted (got: ${selinux_policy:-<unknown>})"
 fi
+
+# AVC denials since boot. Any denial is a policy gap or missing label —
+# either way, a misconfigured image that should fail the smoke test.
+# ausearch exits 1 on "no matches found" (normal) + prints to stderr; route
+# to /dev/null and rely on output parsing instead.
+avc_count=$(ssh "${SSH_OPTS[@]}" \
+    'sudo ausearch -m AVC,USER_AVC -ts boot 2>/dev/null | grep -c "^type=.*AVC" || true' \
+    2>/dev/null)
+avc_count=${avc_count:-0}
+row "AVC denials" "$avc_count"
+if (( avc_count > 0 )); then
+    FAIL=1
+    status "✗" "SELinux AVC denials since boot: $avc_count"
+    log "Sample denials (first 10):"
+    ssh "${SSH_OPTS[@]}" 'sudo ausearch -m AVC,USER_AVC -ts boot 2>/dev/null | grep "^type=.*AVC" | head -10' \
+        2>/dev/null | sed 's/^/  /' || true
+fi
 [[ -z "$FAIL" ]] || die "SELinux assertions failed"
 
 # ── Fedbuild release file ─────────────────────────────────────────────────────
