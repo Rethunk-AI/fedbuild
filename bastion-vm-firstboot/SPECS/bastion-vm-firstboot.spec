@@ -5,10 +5,15 @@ Summary:        First-boot setup for coding-agent VM
 License:        MIT
 BuildArch:      noarch
 BuildRequires:  systemd-rpm-macros
+BuildRequires:  ShellCheck
 
 Requires:       bash
 Requires:       curl
 Requires:       systemd
+
+# Commit SHA is passed in from Makefile via --define "_git_commit <sha>".
+# Falls back to "unknown" when built outside a git tree.
+%global git_commit %{?_git_commit}%{!?_git_commit:unknown}
 
 Source0:        firstboot.sh
 Source1:        bastion-vm-firstboot.service
@@ -42,14 +47,32 @@ install -Dm644 %{SOURCE4} %{buildroot}%{_datadir}/%{name}/agent-claude.md
 install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 
+%check
+# Lint shell sources at rpmbuild time — failures fail the build.
+shellcheck %{SOURCE0} %{SOURCE2}
+
 %post
 %systemd_post %{name}.service
+# /etc/fedbuild-release — env-file format; consumed by agent + smoke.
+# INSTALL_DATE is image-build time (non-reproducible by design: it tells you
+# when this image was assembled, not when the RPM was built).
+cat > %{_sysconfdir}/fedbuild-release <<EOF
+NAME=bastion-vm-firstboot
+VERSION=%{version}
+RELEASE=%{release}
+GIT_COMMIT=%{git_commit}
+INSTALL_DATE=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+EOF
+chmod 0644 %{_sysconfdir}/fedbuild-release
 
 %preun
 %systemd_preun %{name}.service
 
 %postun
 %systemd_postun_with_restart %{name}.service
+if [ $1 -eq 0 ]; then
+    rm -f %{_sysconfdir}/fedbuild-release
+fi
 
 %files
 %dir %{_libexecdir}/%{name}
@@ -62,6 +85,7 @@ install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 %{_datadir}/%{name}/agent-claude.md
 %{_datadir}/%{name}/agent-settings.json
 %{_datadir}/%{name}/Brewfile
+%ghost %{_sysconfdir}/fedbuild-release
 
 %changelog
 * Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.4.0-1

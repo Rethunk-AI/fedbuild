@@ -42,11 +42,13 @@ deps:
 $(RPM): $(SPECFILE) $(SOURCES)
 	mkdir -p $(TOPDIR)/{BUILD,RPMS,SRPMS,SPECS,SOURCES}
 	@sde=$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null || date +%s); \
-	 echo "SOURCE_DATE_EPOCH=$$sde"; \
+	 sha=$$(git rev-parse HEAD 2>/dev/null || echo unknown); \
+	 echo "SOURCE_DATE_EPOCH=$$sde GIT_COMMIT=$$sha"; \
 	 env LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=$$sde rpmbuild \
 		--define "_topdir    $(TOPDIR)"                 \
 		--define "_sourcedir $(SRCDIR)"                 \
 		--define "_buildhost reproducible.fedbuild"     \
+		--define "_git_commit $$sha"                    \
 		--define "clamp_mtime_to_source_date_epoch 1"   \
 		--define "use_source_date_epoch_as_buildtime 1" \
 		--define "source_date_epoch_from_changelog 0"   \
