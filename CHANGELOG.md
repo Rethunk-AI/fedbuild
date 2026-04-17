@@ -8,6 +8,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Capture serial console to file; dump on failure
+- Dump firstboot timing summary; quiet semgrep version banner
+- Harden firstboot unit with selected sandboxing
+- Emit /etc/fedbuild-release + inline shellcheck in %check
+- Emit /var/log/fedbuild-ready.json on success
+- Always dump journal, SELinux + release assertions
+- Expand CLAUDE.md workflow notes; add hooks/env/model to settings
+- Slim locale + drop man-pages; raise disk to 50 GiB
+- Add sbom target (syft CycloneDX + SPDX)
+- Unified regression tracking CSV + baseline-record target
+- Bake dnf-automatic security-only updates
+- Ship auditd with minimal root-exec + sudoers watch rules
+- Dump Brewfile.lock.json record post-install (not a pin)
+- Add bless-boot-time + include smoke-rerun.sh in shellcheck
+
+### CI
+- Enforce Conventional Commits on PRs via commitlint
+- Add systemd-analyze security advisory step
+
+### Changed
+- Tidy log layout — aligned columns, status glyphs
+- Parallelize brew bundle with npm work; add timing summary
+- Reclaim disk at end via brew cleanup + dnf clean all
+- Unify tool presence + version into one section
+- Dense final banner; hide passing config rows
+
+### Docs
+- Add threat model + trust boundary
+- Operational notes for baselines, auditd, SBOM verification
+- Document sbom/attest/smoke-rerun/baseline-record targets
+- SBOM, SLSA L1, auditd, dnf-automatic in threat model
+
+### Fixed
+- Scheme-qualify --extra-repo and add build-time external repos
+- Drop user(user) auto-dep; chown sentinel dir at service start
+- Force zstd decompression over mktemp placeholder
+- Swap -nographic for -display none to allow -daemonize
+- Observe QEMU; detect early exit; surface stderr
+- Boot under OVMF (UEFI) via q35
+- Disable initial-setup.service to unblock headless boot
+- Pass -cpu host so guest sees SSSE3/AVX/etc.
+- Add tar and ruby for Homebrew bootstrap
+- Drop brew --no-lock; install corepack via npm
+- Drop stripe-cli — macOS-only formula
+- Use per-tool version commands
+- Verify brew bundle completeness
+- Strip chained env-var prefixes before probing binary
+- Clean run output + ephemeral host keys
+
+### Tests
+- Assert auditd + dnf-automatic + Brewfile.lock.json
+- Boot-time regression check against tests/boot-time.baseline
+- Add smoke-rerun.sh for idempotency verification
+- Initial boot-time baseline placeholder (120s)
+
+## [0.4.0] - 2026-04-16
+
+### Added
 - Emit SHA256SUMS alongside built image
 - Add sign/verify targets for SHA256SUMS (cosign keyless)
 - JSON-schema validate baked agent-settings.json
@@ -33,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clean repo dir before rebuilding
 - Consolidate EXIT trap; failure sentinel survives brew install
 - Sshd_config.d drop-in mode 0644 (was 0600)
+- Install systemd-rpm-macros + git; fix spec changelog dates
 
 ### Tests
 - Fail fast when firstboot writes failed sentinel
