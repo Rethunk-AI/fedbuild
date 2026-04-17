@@ -1,0 +1,18 @@
+# fedbuild audit rules — loaded by auditd at boot.
+# Scope: minimal — sudoers integrity + root-exec logging only.
+# These rules intentionally do NOT audit 'user' account activity.
+# The auid=0 filter on execve ensures firstboot (which runs as 'user',
+# not root) does not generate noise during image setup.
+
+# Watch sudoers for writes and attribute changes
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+
+# Watch /root for writes and attribute changes
+-w /root/ -p wa -k root-writes
+
+# Log execve syscalls for UID 0 (root) only — captures root command execution
+-a always,exit -F arch=b64 -S execve -F auid=0 -k root-exec
+
+# NOTE: -e 1 (immutable rules) is intentionally omitted so that
+# smoke tests and live audit-rule changes work without rebooting.

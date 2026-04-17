@@ -17,6 +17,7 @@ Source3:        user-sudoers
 Source4:        agent-claude.md
 Source5:        agent-settings.json
 Source6:        Brewfile
+Source7:        99-fedbuild.rules
 
 %description
 Runs once on first boot (as the 'user' account) to install Homebrew
@@ -41,6 +42,7 @@ install -d %{buildroot}%{_localstatedir}/lib/%{name}
 install -Dm644 %{SOURCE4} %{buildroot}%{_datadir}/%{name}/agent-claude.md
 install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
+install -Dm640 %{SOURCE7} %{buildroot}%{_sysconfdir}/audit/rules.d/99-fedbuild.rules
 
 %post
 %systemd_post %{name}.service
@@ -62,6 +64,7 @@ install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
 %{_datadir}/%{name}/agent-claude.md
 %{_datadir}/%{name}/agent-settings.json
 %{_datadir}/%{name}/Brewfile
+%attr(0640,root,root) %{_sysconfdir}/audit/rules.d/99-fedbuild.rules
 
 %changelog
 * Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.4.0-1

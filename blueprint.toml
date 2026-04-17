@@ -57,6 +57,7 @@ packages = [
     { name = "ShellCheck",     version = "*" },
     { name = "helm",           version = "*" },
     { name = "dnf-automatic",  version = "*" },   # security-only auto-updates
+    { name = "audit",          version = "*" },   # auditd daemon + audit-libs (transitive)
 
     # --- from external repos (see [[customizations.repositories]] below) ---
     { name = "code",           version = "*" },   # VS Code stable — includes 'code' CLI
