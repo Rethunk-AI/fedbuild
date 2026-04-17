@@ -151,6 +151,28 @@ cp /usr/share/bastion-vm-firstboot/agent-claude.md ~/.claude/CLAUDE.md
 cp /usr/share/bastion-vm-firstboot/agent-settings.json ~/.claude/settings.json
 log "Claude Code configuration written to ~/.claude/"
 
+# ── Cleanup: reclaim disk after deferred brew cleanup + dnf caches ────────────
+# HOMEBREW_NO_INSTALL_CLEANUP=1 above skipped per-install cleanup for speed;
+# we run it once here at the end. dnf metadata/cache are redundant in a baked
+# image — the agent can redownload on demand.
+# Only runs on success; on failure we leave caches in place for diagnosis.
+section_start cleanup
+if [[ ${#FAILED[@]} -eq 0 ]]; then
+    before=$(df --output=used -B1 /home/linuxbrew 2>/dev/null | tail -1 || echo 0)
+    log "brew cleanup --prune=all"
+    brew cleanup --prune=all || log "WARN: brew cleanup returned non-zero"
+    log "sudo dnf clean all"
+    sudo dnf clean all || log "WARN: dnf clean all returned non-zero"
+    after=$(df --output=used -B1 /home/linuxbrew 2>/dev/null | tail -1 || echo 0)
+    if [[ "$before" != 0 && "$after" != 0 ]]; then
+        freed=$(( (before - after) / 1024 / 1024 ))
+        log "Freed ${freed} MiB on /home/linuxbrew"
+    fi
+else
+    log "Skipping cleanup due to earlier failures (preserve caches for diagnosis)"
+fi
+section_end
+
 if [[ ${#FAILED[@]} -gt 0 ]]; then
     log "FAILED installs: ${FAILED[*]}"
     exit 1
