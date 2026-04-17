@@ -1,6 +1,6 @@
 name = "fedora-43-devbox"
 description = "Fedora 43 minimal image — Git, Node.js, and Go development"
-version = "0.4.0"
+version = "0.5.0"
 distro = "fedora-43"
 
 # All packages use version = "*" — always pull the latest available.
@@ -27,7 +27,6 @@ packages = [
     { name = "bash-completion", version = "*" },
     { name = "less",           version = "*" },
     { name = "man-db",         version = "*" },
-    { name = "man-pages",      version = "*" },
     { name = "ripgrep",        version = "*" },
     { name = "fd-find",        version = "*" },
     { name = "tokei",          version = "*" },
@@ -51,6 +50,11 @@ packages = [
     { name = "which",          version = "*" },
     { name = "tar",            version = "*" },   # required by Homebrew (ruby extract)
     { name = "ruby",           version = "*" },   # Homebrew dependency
+
+    # --- locale slim ---
+    # Replaces glibc-all-langpacks (~90 MB) with minimal (~1 MB). System
+    # locale already pinned to en_US.UTF-8 in [customizations.locale].
+    { name = "glibc-minimal-langpack", version = "*" },
 
     # --- from fedora repos ---
     { name = "gh",             version = "*" },
@@ -96,7 +100,7 @@ append = "console=ttyS0,115200 console=tty0"
 # single root partition — no LVM, no split mounts
 [[customizations.filesystem]]
 mountpoint = "/"
-minsize = 21474836480    # 20 GiB
+minsize = 53687091200    # 50 GiB
 
 # Microsoft repo — VS Code Insiders
 [[customizations.repositories]]
