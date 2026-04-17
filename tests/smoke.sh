@@ -136,7 +136,8 @@ log "SSH up"
 # Polls both 'done' (success) and 'failed' (error) so a broken firstboot
 # aborts the smoke test in seconds instead of waiting out TIMEOUT_FIRSTBOOT.
 log "Waiting for firstboot sentinel (up to ${TIMEOUT_FIRSTBOOT}s)"
-deadline=$(( $(date +%s) + TIMEOUT_FIRSTBOOT ))
+firstboot_start=$(date +%s)
+deadline=$(( firstboot_start + TIMEOUT_FIRSTBOOT ))
 while :; do
     state=$(ssh "${SSH_OPTS[@]}" '
         if [ -f /var/lib/bastion-vm-firstboot/failed ]; then echo failed
@@ -155,6 +156,10 @@ while :; do
     sleep 15
     log "  still waiting..."
 done
+FIRSTBOOT_SECS=$(( $(date +%s) - firstboot_start ))
+log "firstboot completed in ${FIRSTBOOT_SECS}s"
+# Export for use by make baseline-record
+export FIRSTBOOT_SECS
 
 # ── Assert tools ──────────────────────────────────────────────────────────────
 log "Asserting tool presence"
@@ -189,6 +194,23 @@ log_version buf        'buf --version'
 log_version semgrep    'semgrep --version'
 log_version actionlint 'actionlint -version'
 log_version gemini     'gemini --version'
+
+# ── Boot-time regression check ────────────────────────────────────────────────
+BOOT_TIME_BASELINE="${BOOT_TIME_BASELINE:-$(dirname "$0")/boot-time.baseline}"
+BOOT_BUDGET_PCT="${BOOT_BUDGET_PCT:-20}"
+if [[ ! -f "$BOOT_TIME_BASELINE" ]]; then
+    log "no baseline, skipping boot-time check (run: make bless-boot-time)"
+else
+    baseline_secs=$(cat "$BOOT_TIME_BASELINE")
+    # budget = baseline * (1 + BOOT_BUDGET_PCT/100), integer arithmetic
+    limit=$(( baseline_secs + baseline_secs * BOOT_BUDGET_PCT / 100 ))
+    if (( FIRSTBOOT_SECS > limit )); then
+        die "firstboot time ${FIRSTBOOT_SECS}s exceeds baseline ${baseline_secs}s by >${BOOT_BUDGET_PCT}% (limit=${limit}s)"
+    else
+        delta_pct=$(awk -v a="$FIRSTBOOT_SECS" -v b="$baseline_secs" 'BEGIN{printf "%.1f", (a-b)*100.0/b}')
+        log "boot-time OK: ${FIRSTBOOT_SECS}s (baseline ${baseline_secs}s, ${delta_pct}%, budget +${BOOT_BUDGET_PCT}%)"
+    fi
+fi
 
 # ── Assert hardening ──────────────────────────────────────────────────────────
 log "Hardening"
