@@ -22,6 +22,12 @@ FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
 SSH_UP=0
 
 log() { echo "[smoke] $(date -Iseconds) $*"; }
+# sub: indented sub-line without prefix/timestamp — reduces noise under section headers.
+sub() { printf '  %s\n' "$*"; }
+# row: aligned "label  value" under a section header.
+row() { printf '  %-12s %s\n' "$1" "$2"; }
+# status: "✓ label" or "✗ label" — glyph + item for pass/fail checks.
+status() { printf '  %s %s\n' "$1" "$2"; }
 
 # dump_journal: grab firstboot journal to $FAIL_LOG (best-effort; SSH may be down)
 dump_journal() {
@@ -156,10 +162,10 @@ FAIL=""
 TOOLS=(claude gemini git gh go node brew semgrep actionlint buf kubectl uv bun yarn supabase watchexec)
 for tool in "${TOOLS[@]}"; do
     # shellcheck disable=SC2029  # $tool intentionally expands client-side
-    if ssh "${SSH_OPTS[@]}" "command -v $tool" 2>/dev/null; then
-        log "  $tool: OK"
+    if ssh "${SSH_OPTS[@]}" "command -v $tool" >/dev/null 2>&1; then
+        status "✓" "$tool"
     else
-        log "  $tool: MISSING"
+        status "✗" "$tool"
         FAIL=1
     fi
 done
@@ -174,7 +180,7 @@ log_version() {
     local label="$1" cmd="$2" actual
     # shellcheck disable=SC2029
     actual=$(ssh "${SSH_OPTS[@]}" "$cmd 2>&1 | awk 'NF{print;exit}'" 2>/dev/null) || actual="<error>"
-    log "  $label: ${actual:-<no output>}"
+    row "$label" "${actual:-<no output>}"
 }
 log_version claude     'claude --version'
 log_version node       'node --version'
@@ -189,9 +195,9 @@ log "Asserting ~/.claude/ config"
 for f in /home/user/.claude/CLAUDE.md /home/user/.claude/settings.json; do
     # shellcheck disable=SC2029  # $f intentionally expands client-side
     if ssh "${SSH_OPTS[@]}" "test -f $f" 2>/dev/null; then
-        log "  $f: OK"
+        status "✓" "$f"
     else
-        log "  $f: MISSING"
+        status "✗" "$f"
         FAIL=1
     fi
 done
