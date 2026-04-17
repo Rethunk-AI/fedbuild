@@ -21,6 +21,7 @@ TIMEOUT_FIRSTBOOT="${TIMEOUT_FIRSTBOOT:-1200}"
 FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
 VERBOSE="${VERBOSE:-0}"
 SSH_UP=0
+FINISHED=0
 START_EPOCH=$(date +%s)
 BOOT_SECS=""        # populated when SSH comes up
 FIRSTBOOT_SECS=""   # populated from Timing summary "total" row
@@ -38,7 +39,10 @@ status() { printf '  %s %s\n' "$1" "$2"; }
 # dump_journal: grab firstboot journal to $FAIL_LOG (best-effort; SSH may be down)
 # Always called on exit (success or failure) via EXIT trap below — an empty
 # smoke-fail.log that isn't written means SSH never came up, not that we skipped.
+# FINISHED=1 means the success path already captured $SUCCESS_LOG and powered
+# off the VM; the trap's capture would only produce "connection refused".
 dump_journal() {
+    [[ "$FINISHED" == "1" ]] && return
     [[ "$SSH_UP" == "1" ]] || { log "SSH never came up — no journal to capture"; return; }
     log "Capturing firstboot journal → $FAIL_LOG"
     mkdir -p "$(dirname "$FAIL_LOG")"
@@ -135,7 +139,20 @@ if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     die "QEMU exited before VM came up"
 fi
 
-SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$SSH_KEY" -p "$SSH_PORT" user@localhost)
+# VM host keys regenerate every boot — pin known_hosts to /dev/null so we never
+# record them and never trip REMOTE HOST IDENTIFICATION HAS CHANGED on replays.
+# LogLevel=ERROR suppresses the resulting "Permanently added" + host-key warnings
+# that would otherwise pollute $SUCCESS_LOG (captures ssh stderr via 2>&1).
+SSH_OPTS=(
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o GlobalKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+    -o ConnectTimeout=5
+    -i "$SSH_KEY"
+    -p "$SSH_PORT"
+    user@localhost
+)
 
 # ── Wait for SSH ──────────────────────────────────────────────────────────────
 log "Waiting for SSH (up to ${TIMEOUT_SSH}s)"
@@ -151,8 +168,17 @@ log "SSH up (${BOOT_SECS}s from start)"
 # ── Wait for firstboot sentinel ───────────────────────────────────────────────
 # Polls both 'done' (success) and 'failed' (error) so a broken firstboot
 # aborts the smoke test in seconds instead of waiting out TIMEOUT_FIRSTBOOT.
+# Progress indicator: spinner + elapsed time on stderr when stderr is a TTY,
+# so `make smoke | tee log` animates live but the log stays clean.
 log "Waiting for firstboot sentinel (up to ${TIMEOUT_FIRSTBOOT}s)"
-deadline=$(( $(date +%s) + TIMEOUT_FIRSTBOOT ))
+fb_start=$(date +%s)
+deadline=$(( fb_start + TIMEOUT_FIRSTBOOT ))
+spin=('|' '/' '-' "\\")
+spin_i=0
+tty=0; [[ -t 2 ]] && tty=1
+# Use 'if' not '&&' — under `set -e` a false arithmetic test at end of the
+# function would make clear_spin return non-zero and kill the script.
+clear_spin() { if (( tty )); then printf '\r\033[K' >&2; fi; }
 while :; do
     state=$(ssh "${SSH_OPTS[@]}" '
         if [ -f /var/lib/bastion-vm-firstboot/failed ]; then echo failed
@@ -160,17 +186,26 @@ while :; do
         else echo waiting
         fi' 2>/dev/null || echo waiting)
     case "$state" in
-        done) log "firstboot done"; break ;;
+        done) clear_spin; break ;;
         failed)
+            clear_spin
             log "Dumping firstboot journal for diagnostics:"
             ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
             die "firstboot failed sentinel present — see journal above"
             ;;
     esac
-    (( $(date +%s) < deadline )) || die "firstboot did not complete within ${TIMEOUT_FIRSTBOOT}s"
-    sleep 15
-    log "  still waiting..."
+    (( $(date +%s) < deadline )) || { clear_spin; die "firstboot did not complete within ${TIMEOUT_FIRSTBOOT}s"; }
+    # Spinner animates every 1s while SSH polls every 5s (keeps load low).
+    for _ in 1 2 3 4 5; do
+        if (( tty )); then
+            elapsed=$(( $(date +%s) - fb_start ))
+            printf '\r  %s firstboot running... %ds elapsed' "${spin[spin_i % 4]}" "$elapsed" >&2
+            spin_i=$((spin_i + 1))
+        fi
+        sleep 1
+    done
 done
+log "firstboot done ($(( $(date +%s) - fb_start ))s)"
 
 # ── Tool versions (combined presence + version check) ─────────────────────────
 # A missing binary means log_version prints "<MISSING>" and marks FAIL — so
@@ -299,6 +334,10 @@ done
 [[ -z "$FAIL" ]] || die "Claude config files missing"
 
 # ── Shutdown + final banner ───────────────────────────────────────────────────
+# FINISHED=1 tells dump_journal (EXIT trap) to skip — $SUCCESS_LOG is already
+# written and the VM is about to go down, so re-dumping would just log
+# "connection refused" over a working capture.
+FINISHED=1
 ssh "${SSH_OPTS[@]}" "sudo poweroff" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
