@@ -56,6 +56,7 @@ packages = [
     { name = "gh",             version = "*" },
     { name = "ShellCheck",     version = "*" },
     { name = "helm",           version = "*" },
+    { name = "dnf-automatic",  version = "*" },   # security-only auto-updates
 
     # --- from external repos (see [[customizations.repositories]] below) ---
     { name = "code",           version = "*" },   # VS Code stable — includes 'code' CLI
@@ -78,7 +79,7 @@ key = "ssh-ed25519 CHANGEME user@localhost"
 groups = ["wheel"]
 
 [customizations.services]
-enabled = ["sshd", "bastion-vm-firstboot"]
+enabled = ["sshd", "bastion-vm-firstboot", "dnf-automatic-install.timer", "auditd.service"]
 # initial-setup is Anaconda's interactive first-boot TUI; it blocks headless
 # boot waiting for input even when the user is pre-created by the blueprint.
 disabled = ["initial-setup"]
@@ -122,6 +123,13 @@ enabled = true
 path = "/etc/ssh/sshd_config.d/99-hardening.conf"
 mode = "0644"
 data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers user\n"
+
+# dnf-automatic: security-only updates, apply immediately, no reboot.
+# Overrides /etc/dnf/automatic.conf shipped by the dnf-automatic package.
+[[customizations.files]]
+path = "/etc/dnf/automatic.conf"
+mode = "0644"
+data = "[commands]\nupgrade_type = security\ndownload_updates = yes\napply_updates = yes\nrandom_sleep = 900\n\n[emitters]\nemit_via = stdio\n"
 
 # System-wide git identity — prevents "Please tell me who you are" errors.
 # The agent can override per-repo with: git config user.name / user.email
