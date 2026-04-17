@@ -400,23 +400,27 @@ row "signingkey"  "${signing_key:-<unset>}"
 row "gpgsign"     "${signing_on:-<unset>}"
 [[ "$signing_format" == "ssh"  ]] || { status "✗" "gpg.format != ssh (got: ${signing_format:-<unset>})"; FAIL=1; }
 [[ "$signing_on"     == "true" ]] || { status "✗" "commit.gpgsign != true (got: ${signing_on:-<unset>})"; FAIL=1; }
-# End-to-end: init repo, make signed commit, verify with git log --show-signature.
+# End-to-end: init repo, make signed commit, verify with git verify-commit.
+# verify-commit's exit code (0 = good) is more stable than grepping
+# --show-signature output across git versions.
 sign_probe=$(ssh "${SSH_OPTS[@]}" '
     set -e
     d=$(mktemp -d)
     cd "$d"
     git init -q
     git commit --allow-empty -m "smoke signing probe" -q
-    git log --show-signature -1 2>&1 | head -5
+    if git verify-commit HEAD 2>&1; then
+        echo __VERIFIED__
+    else
+        echo "__UNVERIFIED__: $(git log --show-signature -1 2>&1 | head -3)"
+    fi
     rm -rf "$d"
 ' 2>/dev/null || true)
-if echo "$sign_probe" | grep -q "Good .* signature"; then
+if echo "$sign_probe" | grep -q "__VERIFIED__"; then
     status "✓" "signed commit verifies"
-elif echo "$sign_probe" | grep -qi "signature"; then
-    sub "signature probe: $(echo "$sign_probe" | head -1)"
 else
     FAIL=1
-    status "✗" "signed commit probe produced no signature (got: $(echo "$sign_probe" | head -1))"
+    status "✗" "signed commit probe failed: $(echo "$sign_probe" | head -1)"
 fi
 [[ -z "$FAIL" ]] || die "git signing assertions failed"
 
@@ -444,7 +448,10 @@ else
     done
     # Wait for system to reach "running" (not still in startup) so service
     # state queries below reflect final post-boot state, not mid-boot.
-    ssh "${SSH_OPTS[@]}" 'systemctl is-system-running --wait' >/dev/null 2>&1 || true
+    # 30s ceiling — degraded units (e.g. dnf-automatic-install on a stale
+    # network) would otherwise hang the whole smoke indefinitely.
+    ssh "${SSH_OPTS[@]}" 'timeout 30 systemctl is-system-running --wait' \
+        >/dev/null 2>&1 || true
     SECONDBOOT_SECS=$(( $(date +%s) - reboot_start ))
     export SECONDBOOT_SECS
     row "secondboot" "${SECONDBOOT_SECS}s"
