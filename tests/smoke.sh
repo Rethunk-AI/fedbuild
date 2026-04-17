@@ -20,11 +20,14 @@ TIMEOUT_SSH="${TIMEOUT_SSH:-120}"
 TIMEOUT_FIRSTBOOT="${TIMEOUT_FIRSTBOOT:-1200}"
 FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
 VERBOSE="${VERBOSE:-0}"
+SKIP_REBOOT="${SKIP_REBOOT:-0}"
+TIMEOUT_SECONDBOOT="${TIMEOUT_SECONDBOOT:-180}"
 SSH_UP=0
 FINISHED=0
 START_EPOCH=$(date +%s)
 BOOT_SECS=""        # populated when SSH comes up
 FIRSTBOOT_SECS=""   # populated from Timing summary "total" row
+SECONDBOOT_SECS=""  # populated after reboot-persistence phase
 TOOLS_OK=0
 TOOLS_TOTAL=0
 
@@ -384,6 +387,64 @@ done
 [[ "$CONFIG_MISSING" == 0 && "$VERBOSE" != "1" ]] && sub "2/2 present"
 [[ -z "$FAIL" ]] || die "Claude config files missing"
 
+# ── Reboot-persistence (optional, SKIP_REBOOT=1 to bypass) ────────────────────
+# Verify firstboot truly one-shot: done sentinel mtime unchanged, service not
+# re-run, no new AVC denials. Also captures SECONDBOOT_SECS (time from reboot
+# request to SSH back up) for baselines.csv trend tracking.
+if [[ "$SKIP_REBOOT" == "1" ]]; then
+    log "Reboot phase skipped (SKIP_REBOOT=1)"
+else
+    log "Reboot-persistence"
+    pre_mtime=$(ssh "${SSH_OPTS[@]}" 'stat -c%Y /var/lib/bastion-vm-firstboot/done 2>/dev/null || echo 0')
+    row "done mtime" "$pre_mtime (pre-reboot)"
+    ssh "${SSH_OPTS[@]}" 'sudo systemctl reboot' 2>/dev/null || true
+    # SSH session terminates as the machine goes down; ignore exit.
+    reboot_start=$(date +%s)
+    # Wait for old sshd to stop responding, then for new one to accept.
+    # Without the "down" phase we'd race and reconnect to the dying session.
+    sleep 3
+    log "waiting for SSH back (up to ${TIMEOUT_SECONDBOOT}s)"
+    deadline=$(( reboot_start + TIMEOUT_SECONDBOOT ))
+    until ssh "${SSH_OPTS[@]}" true 2>/dev/null; do
+        (( $(date +%s) < deadline )) || die "VM did not come back within ${TIMEOUT_SECONDBOOT}s"
+        sleep 3
+    done
+    # Wait for system to reach "running" (not still in startup) so service
+    # state queries below reflect final post-boot state, not mid-boot.
+    ssh "${SSH_OPTS[@]}" 'systemctl is-system-running --wait' >/dev/null 2>&1 || true
+    SECONDBOOT_SECS=$(( $(date +%s) - reboot_start ))
+    export SECONDBOOT_SECS
+    row "secondboot" "${SECONDBOOT_SECS}s"
+
+    # Assertions: sentinel persists, no failed sentinel, service not re-run,
+    # no new AVC denials.
+    post_mtime=$(ssh "${SSH_OPTS[@]}" 'stat -c%Y /var/lib/bastion-vm-firstboot/done 2>/dev/null || echo 0')
+    row "done mtime" "$post_mtime (post-reboot)"
+    failed_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-vm-firstboot/failed ]] && echo yes || echo no')
+    service_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active bastion-vm-firstboot.service 2>/dev/null || echo unknown')
+    avc2=$(ssh "${SSH_OPTS[@]}" \
+        'sudo ausearch -m AVC,USER_AVC -ts boot 2>/dev/null | grep -c "^type=.*AVC" || true' \
+        2>/dev/null)
+    avc2=${avc2:-0}
+    row "failed"      "$failed_present"
+    row "service"     "$service_state"
+    row "AVC denials" "$avc2"
+    FAIL=""
+    [[ "$pre_mtime" != "0" && "$post_mtime" == "$pre_mtime" ]] || \
+        { status "✗" "done sentinel mtime changed (pre=$pre_mtime post=$post_mtime) — firstboot likely re-ran"; FAIL=1; }
+    [[ "$failed_present" == "no" ]] || \
+        { status "✗" "failed sentinel appeared after reboot";                                                    FAIL=1; }
+    # inactive = ran-and-exited (oneshot RemainAfterExit=no); active = running.
+    # Either "activating"/"reloading" means it's re-executing — bad.
+    case "$service_state" in
+        inactive|active) ;;
+        *) status "✗" "firstboot service in unexpected state: $service_state"; FAIL=1 ;;
+    esac
+    (( avc2 == 0 )) || \
+        { status "✗" "SELinux AVC denials after reboot: $avc2"; FAIL=1; }
+    [[ -z "$FAIL" ]] || die "reboot-persistence assertions failed"
+fi
+
 # ── Shutdown + final banner ───────────────────────────────────────────────────
 # FINISHED=1 tells dump_journal (EXIT trap) to skip — $SUCCESS_LOG is already
 # written and the VM is about to go down, so re-dumping would just log
@@ -395,4 +456,4 @@ QEMU_PID=""
 
 TOTAL_SECS=$(( $(date +%s) - START_EPOCH ))
 IMG_SIZE=$(stat -c%s "$IMAGE" 2>/dev/null | awk '{printf "%.1fG", $1/1024/1024/1024}')
-log "PASSED  image=$(basename "$IMAGE")  size=${IMG_SIZE:-?}  boot=${BOOT_SECS:-?}s  firstboot=${FIRSTBOOT_SECS:-?}s  tools=${TOOLS_OK}/${TOOLS_TOTAL}  total=${TOTAL_SECS}s"
+log "PASSED  image=$(basename "$IMAGE")  size=${IMG_SIZE:-?}  boot=${BOOT_SECS:-?}s  firstboot=${FIRSTBOOT_SECS:-?}s  secondboot=${SECONDBOOT_SECS:-skip}s  tools=${TOOLS_OK}/${TOOLS_TOTAL}  total=${TOTAL_SECS}s"
