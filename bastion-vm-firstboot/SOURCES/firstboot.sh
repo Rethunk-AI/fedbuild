@@ -178,4 +178,19 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# ── Emit /var/log/fedbuild-ready.json ─────────────────────────────────────────
+# Single-line JSON snapshot of firstboot outcome for observability + smoke.
+# Sourced from /etc/fedbuild-release (baked by RPM %post); tool versions queried
+# inline. Writing /var/log requires root → sudo tee.
+log "Writing /var/log/fedbuild-ready.json"
+# shellcheck source=/dev/null
+. /etc/fedbuild-release 2>/dev/null || true
+tool_version() { command -v "$1" >/dev/null 2>&1 && "$@" 2>/dev/null | head -1 || echo "<missing>"; }
+ready_json=$(cat <<JSON
+{"name":"${NAME:-bastion-vm-firstboot}","version":"${VERSION:-unknown}","release":"${RELEASE:-unknown}","git_commit":"${GIT_COMMIT:-unknown}","install_date":"${INSTALL_DATE:-unknown}","firstboot_date":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","firstboot_secs":${SECONDS},"tools":{"claude":"$(tool_version claude --version)","gemini":"$(tool_version gemini --version)","brew":"$(brew --version 2>/dev/null | head -1)","node":"$(tool_version node --version)","go":"$(go version 2>/dev/null)"}}
+JSON
+)
+echo "$ready_json" | sudo tee /var/log/fedbuild-ready.json >/dev/null
+sudo chmod 0644 /var/log/fedbuild-ready.json
+
 log "Done"
