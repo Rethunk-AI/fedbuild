@@ -186,9 +186,17 @@ log_version claude     'claude --version'
 log_version node       'node --version'
 log_version go         'go version'
 log_version buf        'buf --version'
-log_version semgrep    'semgrep --version'
+log_version semgrep    'SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version'
 log_version actionlint 'actionlint -version'
 log_version gemini     'gemini --version'
+
+# ── Dump firstboot timing summary ─────────────────────────────────────────────
+# Pulls the "Timing summary" block out of journald so perf regressions show up
+# in the smoke log, not only inside the VM.
+log "Firstboot timing summary"
+ssh "${SSH_OPTS[@]}" \
+    "journalctl -u bastion-vm-firstboot --no-pager -o cat | sed -n '/Timing summary/,\$p'" \
+    2>/dev/null | sed 's/^/  /' || log "  (no summary captured)"
 
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"
