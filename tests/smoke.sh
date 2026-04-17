@@ -190,8 +190,30 @@ log_version semgrep    'semgrep --version'
 log_version actionlint 'actionlint -version'
 log_version gemini     'gemini --version'
 
+# ── Assert hardening ──────────────────────────────────────────────────────────
+log "Hardening"
+FAIL=""
+auditd_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active auditd 2>/dev/null || echo missing')
+rules_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /etc/audit/rules.d/99-fedbuild.rules ]] && echo yes || echo no')
+dnfauto_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-enabled dnf-automatic-install.timer 2>/dev/null || echo missing')
+brewlock_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-vm-firstboot/Brewfile.lock.json ]] && echo yes || echo no')
+row "auditd"      "$auditd_state"
+row "audit rules" "$rules_present"
+row "dnf-auto"    "$dnfauto_state"
+row "brew lock"   "$brewlock_present"
+[[ "$auditd_state"    == "active"  ]] || { status "✗" "auditd not active (got: $auditd_state)";        FAIL=1; }
+[[ "$rules_present"   == "yes"     ]] || { status "✗" "audit rules file missing";                      FAIL=1; }
+[[ "$dnfauto_state"   == "enabled" ]] || { status "✗" "dnf-automatic-install.timer not enabled (got: $dnfauto_state)"; FAIL=1; }
+[[ "$brewlock_present" == "yes"    ]] || { status "✗" "Brewfile.lock.json missing";                    FAIL=1; }
+[[ -z "$FAIL" ]] || die "hardening assertions failed"
+status "✓" "auditd active"
+status "✓" "audit rules present"
+status "✓" "dnf-automatic-install.timer enabled"
+status "✓" "Brewfile.lock.json present"
+
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"
+FAIL=""
 for f in /home/user/.claude/CLAUDE.md /home/user/.claude/settings.json; do
     # shellcheck disable=SC2029  # $f intentionally expands client-side
     if ssh "${SSH_OPTS[@]}" "test -f $f" 2>/dev/null; then
