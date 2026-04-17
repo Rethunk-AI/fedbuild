@@ -52,6 +52,19 @@ BREWFILE=/usr/share/bastion-vm-firstboot/Brewfile
 log "Running brew bundle --file=$BREWFILE"
 if brew bundle --file="$BREWFILE"; then
     log "brew bundle OK"
+    # Dump a post-install record of what landed this boot.
+    # THIS IS A RECORD, NOT A PIN — next boot still pulls "latest".
+    # brew bundle dump produces Brewfile-format text (not JSON despite the
+    # .json suffix); name kept for smoke-assertion + drift-detection clarity.
+    log "Dumping Brewfile.lock.json (post-install record)"
+    _lock_tmp=$(mktemp /tmp/Brewfile.lock.XXXXXX)
+    if brew bundle dump --file="$_lock_tmp" --force; then
+        sudo install -m 0644 "$_lock_tmp" "${SENTINEL_DIR}/Brewfile.lock.json"
+        log "Brewfile.lock.json written to ${SENTINEL_DIR}/Brewfile.lock.json"
+    else
+        log "WARN: brew bundle dump failed — lock record not written"
+    fi
+    rm -f "$_lock_tmp"
 else
     log "ERROR: brew bundle reported failures"
     FAILED+=("brew:bundle")
