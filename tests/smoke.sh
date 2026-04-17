@@ -210,53 +210,29 @@ log "FEDBUILD_READY seen (${FIRSTBOOT_SECS}s)"
 # Exported for make baseline-record consumption.
 export FIRSTBOOT_SECS
 
-# ── Tool versions (combined presence + version check) ─────────────────────────
-# A missing binary means log_version prints "<MISSING>" and marks FAIL — so
-# this single section replaces the old separate "Asserting tool presence" loop.
-log "Tool versions"
+# ── Tool versions (parsed from serial FEDBUILD_TOOL markers) ─────────────────
+# firstboot emits one `FEDBUILD_TOOL: label=version` line per tool between
+# `tools-begin` and `tools-end` markers. Parsing from the serial log removes
+# ~16 SSH round-trips per smoke run and keeps the authoritative tool list in
+# one place (firstboot.sh) rather than duplicated here.
+#
+# Failure modes:
+#   <missing>   tool not on PATH in the VM
+#   <error>     --version command exited non-zero (unlikely but possible)
+#   <empty>     command produced no output (suspect: tool broke post-install)
+# Any of the above, or a label with no version separator, counts as a FAIL.
+log "Tool versions (from serial FEDBUILD_TOOL markers)"
 FAIL=""
-# log_version <label> <remote-cmd> — runs remote-cmd via SSH; records MISSING
-# when the binary isn't on PATH, otherwise prints first non-empty line.
-log_version() {
-    local label="$1" cmd="$2" bin actual head="$2"
-    # Walk off leading "VAR=value " env-var prefixes (may be chained), then take
-    # the first remaining whitespace token as the binary name. Previous logic
-    # took the first token (an env var) and returned its value — making
-    # `SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version` probe `0` instead of
-    # `semgrep`, producing a false <MISSING>.
-    while [[ "$head" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
-        head="${head#* }"
-    done
-    bin=${head%% *}
+while IFS='=' read -r label ver; do
     TOOLS_TOTAL=$((TOOLS_TOTAL+1))
-    # shellcheck disable=SC2029
-    if ! ssh "${SSH_OPTS[@]}" "command -v $bin" >/dev/null 2>&1; then
-        row "$label" "<MISSING>"
-        FAIL=1
-        return
-    fi
-    # shellcheck disable=SC2029
-    actual=$(ssh "${SSH_OPTS[@]}" "$cmd 2>&1 | awk 'NF{print;exit}'" 2>/dev/null) || actual="<error>"
-    TOOLS_OK=$((TOOLS_OK+1))
-    row "$label" "${actual:-<no output>}"
-}
-log_version claude     'claude --version'
-log_version gemini     'gemini --version'
-log_version git        'git --version'
-log_version gh         'gh --version'
-log_version go         'go version'
-log_version node       'node --version'
-log_version brew       'brew --version'
-log_version semgrep    'SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version'
-log_version actionlint 'actionlint -version'
-log_version buf        'buf --version'
-log_version kubectl    'kubectl version --client=true'
-log_version uv         'uv --version'
-log_version bun        'bun --version'
-log_version yarn       'yarn --version'
-log_version supabase   'supabase --version'
-log_version watchexec  'watchexec --version'
-[[ -z "$FAIL" ]] || die "one or more tools missing"
+    row "$label" "${ver:-<empty>}"
+    case "$ver" in
+        ''|'<missing>'|'<error>'|'<empty>') FAIL=1 ;;
+        *) TOOLS_OK=$((TOOLS_OK+1)) ;;
+    esac
+done < <(awk '/^FEDBUILD_TOOL: /{sub(/^FEDBUILD_TOOL: /, ""); print}' "$SERIAL_LOG")
+(( TOOLS_TOTAL > 0 )) || die "no FEDBUILD_TOOL markers found on serial — firstboot contract broken"
+[[ -z "$FAIL" ]] || die "one or more tools missing or broken"
 
 # ── Dump firstboot journal on success ─────────────────────────────────────────
 # Full journal (not just timing summary) so any warnings, brew bundle output,
