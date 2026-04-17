@@ -22,8 +22,10 @@ FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
 VERBOSE="${VERBOSE:-0}"
 SKIP_REBOOT="${SKIP_REBOOT:-0}"
 TIMEOUT_SECONDBOOT="${TIMEOUT_SECONDBOOT:-180}"
+SERIAL_TAIL="${SERIAL_TAIL:-1}"   # 1 = stream VM serial live to stdout, 0 = silent (log only)
 SSH_UP=0
 FINISHED=0
+TAIL_PID=""
 START_EPOCH=$(date +%s)
 BOOT_SECS=""        # populated when SSH comes up
 FIRSTBOOT_SECS=""   # populated from Timing summary "total" row
@@ -89,6 +91,7 @@ cleanup() {
     # Always grab the firstboot journal if SSH ever came up — avoids losing
     # diagnostics when the script exits via die() vs normal path.
     dump_journal 2>/dev/null || true
+    [[ -n "$TAIL_PID" ]] && kill "$TAIL_PID" 2>/dev/null || true
     rm -f "$TMPIMAGE" "${TMPVARS:-}"
     [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null || true
 }
@@ -140,6 +143,16 @@ if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     dump_qemu
     dump_serial
     die "QEMU exited before VM came up"
+fi
+
+# Live-stream VM serial to stdout so kernel boot, systemd units, and firstboot
+# progress (journal+console) are visible as they happen — no more blind waits.
+# -F follows the name across truncation; prefix distinguishes VM lines from
+# smoke's own log output. QEMU opens $SERIAL_LOG in append mode, so the file
+# already exists (pre-truncated above); tail attaches cleanly.
+if [[ "$SERIAL_TAIL" == "1" ]]; then
+    tail -F "$SERIAL_LOG" 2>/dev/null | sed -u 's/^/[vm] /' &
+    TAIL_PID=$!
 fi
 
 # VM host keys regenerate every boot — pin known_hosts to /dev/null so we never

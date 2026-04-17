@@ -19,7 +19,9 @@ TIMEOUT_SSH="${TIMEOUT_SSH:-120}"
 TIMEOUT_FIRSTBOOT="${TIMEOUT_FIRSTBOOT:-1200}"
 FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
 RERUN_LOG="${RERUN_LOG:-$OUTDIR/smoke-rerun.log}"
+SERIAL_TAIL="${SERIAL_TAIL:-1}"
 SSH_UP=0
+TAIL_PID=""
 
 log()    { echo "[rerun] $(date -Iseconds) $*"; }
 sub()    { printf '  %s\n' "$*"; }
@@ -63,6 +65,7 @@ log "Image: $IMAGE"
 TMPIMAGE=$(mktemp /tmp/rerun-XXXXXX.raw)
 QEMU_PID=""
 cleanup() {
+    [[ -n "$TAIL_PID" ]] && kill "$TAIL_PID" 2>/dev/null || true
     rm -f "$TMPIMAGE" "${TMPVARS:-}"
     [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null || true
 }
@@ -114,6 +117,12 @@ if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     dump_qemu
     dump_serial
     die "QEMU exited before VM came up"
+fi
+
+# Live VM serial → stdout. See smoke.sh for rationale.
+if [[ "$SERIAL_TAIL" == "1" ]]; then
+    tail -F "$SERIAL_LOG" 2>/dev/null | sed -u 's/^/[vm] /' &
+    TAIL_PID=$!
 fi
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$SSH_KEY" -p "$SSH_PORT" user@localhost)
