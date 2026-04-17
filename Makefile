@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -16,6 +16,7 @@ SHA256SUMS_CERT   := $(OUTDIR)/SHA256SUMS.pem
 SIZE_FILE         := $(OUTDIR)/SIZE
 SIZE_BASELINE     := $(FEDBUILD)/tests/size.baseline
 SIZE_BUDGET_PCT   ?= 10
+BOOT_TIME_BASELINE := $(FEDBUILD)/tests/boot-time.baseline
 
 PKG_NAME    := bastion-vm-firstboot
 PKG_VERSION := $(shell sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE))
@@ -96,7 +97,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
 check: check-versions check-settings
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/diff-packages.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh
 	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
@@ -127,6 +128,13 @@ bless-size:
 	cp $(SIZE_FILE) $(SIZE_BASELINE)
 	@echo "Baseline updated → $(SIZE_BASELINE) ($$(cat $(SIZE_BASELINE)) bytes)"
 
+## bless-boot-time: promote FIRSTBOOT_SECS to tests/boot-time.baseline
+## Usage: FIRSTBOOT_SECS=<observed> make bless-boot-time
+bless-boot-time:
+	@test -n "$(FIRSTBOOT_SECS)" || { echo "ERROR: set FIRSTBOOT_SECS=<seconds> (observed from last successful: make smoke)"; exit 1; }
+	@echo "$(FIRSTBOOT_SECS)" > $(BOOT_TIME_BASELINE)
+	@echo "Boot-time baseline updated → $(BOOT_TIME_BASELINE) ($(FIRSTBOOT_SECS)s)"
+
 ## check-versions: assert RPM spec Version and blueprint version match
 check-versions:
 	@spec_ver=$$(sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE)); \
@@ -139,7 +147,7 @@ check-versions:
 
 ## shellcheck: lint all shell scripts in SOURCES and tests/
 shellcheck:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/diff-packages.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
