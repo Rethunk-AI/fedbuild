@@ -180,9 +180,16 @@ FAIL=""
 # log_version <label> <remote-cmd> — runs remote-cmd via SSH; records MISSING
 # when the binary isn't on PATH, otherwise prints first non-empty line.
 log_version() {
-    local label="$1" cmd="$2" bin actual
-    bin=${cmd%% *}                        # first whitespace-delimited token
-    bin=${bin#*=}                         # strip leading VAR=value env prefix if present
+    local label="$1" cmd="$2" bin actual head="$2"
+    # Walk off leading "VAR=value " env-var prefixes (may be chained), then take
+    # the first remaining whitespace token as the binary name. Previous logic
+    # took the first token (an env var) and returned its value — making
+    # `SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version` probe `0` instead of
+    # `semgrep`, producing a false <MISSING>.
+    while [[ "$head" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+        head="${head#* }"
+    done
+    bin=${head%% *}
     TOOLS_TOTAL=$((TOOLS_TOTAL+1))
     # shellcheck disable=SC2029
     if ! ssh "${SSH_OPTS[@]}" "command -v $bin" >/dev/null 2>&1; then
