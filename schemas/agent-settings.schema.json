@@ -1,11 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Rethunk-AI/fedbuild/schemas/agent-settings.schema.json",
+  "$id": "https://github.com/Rethunk-AI/fedbuild/schemas/agent-settings.v1.schema.json",
   "title": "Bastion Agent Claude Code settings",
-  "description": "Minimal local schema for baked ~/.claude/settings.json. Root permits additional keys (Claude Code grows settings over time) but known subfields are strict to catch typos at CI.",
+  "description": "Minimal local schema for baked ~/.claude/settings.json. Root permits additional keys (Claude Code grows settings over time) but known subfields are strict to catch typos at CI. schemaVersion pins the shape; bump when an incompatible schema revision lands.",
   "type": "object",
   "additionalProperties": true,
+  "required": ["schemaVersion"],
   "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Pinned to 1. Bump this + the schema $id fragment together on incompatible revisions."
+    },
     "permissions": {
       "type": "object",
       "additionalProperties": false,
