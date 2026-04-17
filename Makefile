@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -224,6 +224,17 @@ attest:
 	     --output-certificate $(OUTDIR)/provenance.pem \
 	     "$$img"; \
 	 echo "Signed $(OUTDIR)/provenance.json → $(OUTDIR)/provenance.sig + $(OUTDIR)/provenance.pem"
+
+## cve-scan: scan SBOM with grype; fail on critical CVEs not in tests/cve-allowlist.yaml
+## (override: CVE_ALLOWLIST=path/to/file.yaml  SBOM=path/to/sbom.cdx.json)
+CVE_ALLOWLIST ?= $(FEDBUILD)/tests/cve-allowlist.yaml
+SBOM          ?= $(OUTDIR)/sbom.cdx.json
+cve-scan:
+	@command -v grype >/dev/null 2>&1 || \
+		{ echo "ERROR: grype not found — brew install grype"; exit 1; }
+	@test -f $(SBOM) || { echo "ERROR: $(SBOM) not found — run: make sbom"; exit 1; }
+	@test -f $(CVE_ALLOWLIST) || { echo "ERROR: $(CVE_ALLOWLIST) not found"; exit 1; }
+	grype sbom:$(SBOM) -c $(CVE_ALLOWLIST)
 
 ## diff-packages: compare blueprint-declared RPMs against rpm -qa on a running VM
 ## (override: VM_HOST=user@localhost VM_SSH_PORT=2222 SSH_KEY=keys/authorized_key)
