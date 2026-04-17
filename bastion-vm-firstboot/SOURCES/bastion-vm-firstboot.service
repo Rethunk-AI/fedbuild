@@ -15,5 +15,22 @@ StandardOutput=journal+console
 StandardError=journal+console
 RemainAfterExit=yes
 
+# Hardening — selected to not break sudo (needed for corepack/dnf clean) and
+# Homebrew's Ruby. See systemd-analyze security in CI for ongoing audit.
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+# NOT set: NoNewPrivileges (sudo), ProtectSystem (dnf writes /var/cache),
+# MemoryDenyWriteExecute (Homebrew Ruby), ProtectHome (we write ~/.npm-global,
+# ~/.claude, /home/linuxbrew).
+
 [Install]
 WantedBy=multi-user.target
