@@ -1,0 +1,16 @@
+# commitlint — Conventional Commits, enforced in CI via .github/workflows/commitlint.yml.
+# Matches the set used by cliff.toml (git-cliff) for changelog generation;
+# keep these lists in sync when adding/removing types.
+extends:
+  - '@commitlint/config-conventional'
+
+rules:
+  # Subject: lower-case type, no trailing period, capped at 72 chars.
+  type-enum:
+    - 2
+    - always
+    - [build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]
+  header-max-length: [2, always, 72]
+  body-max-line-length: [1, always, 100]
+  subject-full-stop: [2, never, '.']
+  subject-case: [0]  # allow nouns/identifiers mid-subject
