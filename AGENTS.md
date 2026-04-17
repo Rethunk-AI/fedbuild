@@ -108,6 +108,10 @@ Agent can override per-repo: `git config user.name / user.email`
 - `Brewfile.lock.json` dumped post-firstboot is a record of what installed, NOT a pin — next boot re-resolves `latest`
 - `auditd` root-exec rule covers euid=0 only; firstboot/brew/agent activity (as `user`) is not audited
 - SLSA provenance (`make attest`) is Build L1 — no hardened builder; authenticates artifact identity, not build isolation
+- Git SSH signing: firstboot generates per-VM ed25519 key at `~user/.ssh/id_ed25519_signing`, sets `gpg.format=ssh`+`commit.gpgsign=true`+`tag.gpgsign=true` in user-level gitconfig, and appends pubkey to `~user/.ssh/allowed_signers`. `git log --show-signature` verifies locally. Collaborators need the pubkey in their own allowed_signers to verify remotely.
+- `agent-settings.json` is schemaVersion-pinned (currently 1). Bump both `schemaVersion` in the JSON and the filename fragment in `schemas/agent-settings.v1.schema.json` together on incompatible revisions.
+- `tests/cve-allowlist.yaml` is grype's native config; entries require rationale + owner + review date. `make cve-scan` fails on any critical CVE not listed.
+- `tests/brew-drift.sh OLD NEW` diffs two `brew-versions.txt` snapshots (firstboot emits `/var/lib/bastion-vm-firstboot/brew-versions.txt` alongside `Brewfile.lock.json`).
 
 ## CI
 
