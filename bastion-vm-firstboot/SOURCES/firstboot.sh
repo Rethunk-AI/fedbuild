@@ -129,7 +129,7 @@ section_end
 section_start brew_bundle_wait
 log "Waiting for brew bundle (pid $BREW_BUNDLE_PID)"
 if wait "$BREW_BUNDLE_PID"; then
-    log "brew bundle OK"
+    log "brew bundle reported OK"
 else
     log "ERROR: brew bundle reported failures"
     FAILED+=("brew:bundle")
@@ -138,6 +138,26 @@ log "──── brew bundle output ────"
 cat "$BREW_BUNDLE_LOG"
 log "──── end brew bundle output ────"
 rm -f "$BREW_BUNDLE_LOG"
+
+# Verify all formulae actually installed. `brew bundle` has been observed to
+# report "complete! N dependencies now installed" while silently missing one
+# under concurrent bottle fetches (seen: semgrep absent from Cellar after
+# bundle claimed success). `brew bundle check` catches the gap; retry once.
+if ! brew bundle check --file="$BREWFILE" >/dev/null 2>&1; then
+    log "WARN: brew bundle check found missing formulae — retrying"
+    brew bundle check --file="$BREWFILE" --verbose 2>&1 | sed 's/^/  /' | head -20
+    if brew bundle --file="$BREWFILE"; then
+        log "brew bundle retry OK"
+    else
+        log "ERROR: brew bundle retry failed"
+        FAILED+=("brew:bundle:retry")
+    fi
+    if ! brew bundle check --file="$BREWFILE" >/dev/null 2>&1; then
+        log "ERROR: brew bundle still incomplete after retry"
+        brew bundle check --file="$BREWFILE" --verbose 2>&1 | sed 's/^/  /' | head -20
+        FAILED+=("brew:bundle:check")
+    fi
+fi
 section_end
 
 # ── Go workspace ──────────────────────────────────────────────────────────────
