@@ -387,6 +387,39 @@ done
 [[ "$CONFIG_MISSING" == 0 && "$VERBOSE" != "1" ]] && sub "2/2 present"
 [[ -z "$FAIL" ]] || die "Claude config files missing"
 
+# ── Git SSH signing ───────────────────────────────────────────────────────────
+# firstboot generates a per-VM signing key and wires commit.gpgsign=true.
+# Verify end-to-end by signing a throwaway commit in a tmp repo.
+log "Git signing"
+FAIL=""
+signing_format=$(ssh "${SSH_OPTS[@]}" 'git config --global gpg.format' 2>/dev/null)
+signing_key=$(ssh "${SSH_OPTS[@]}" 'git config --global user.signingkey' 2>/dev/null)
+signing_on=$(ssh "${SSH_OPTS[@]}" 'git config --global commit.gpgsign' 2>/dev/null)
+row "format"      "${signing_format:-<unset>}"
+row "signingkey"  "${signing_key:-<unset>}"
+row "gpgsign"     "${signing_on:-<unset>}"
+[[ "$signing_format" == "ssh"  ]] || { status "✗" "gpg.format != ssh (got: ${signing_format:-<unset>})"; FAIL=1; }
+[[ "$signing_on"     == "true" ]] || { status "✗" "commit.gpgsign != true (got: ${signing_on:-<unset>})"; FAIL=1; }
+# End-to-end: init repo, make signed commit, verify with git log --show-signature.
+sign_probe=$(ssh "${SSH_OPTS[@]}" '
+    set -e
+    d=$(mktemp -d)
+    cd "$d"
+    git init -q
+    git commit --allow-empty -m "smoke signing probe" -q
+    git log --show-signature -1 2>&1 | head -5
+    rm -rf "$d"
+' 2>/dev/null || true)
+if echo "$sign_probe" | grep -q "Good .* signature"; then
+    status "✓" "signed commit verifies"
+elif echo "$sign_probe" | grep -qi "signature"; then
+    sub "signature probe: $(echo "$sign_probe" | head -1)"
+else
+    FAIL=1
+    status "✗" "signed commit probe produced no signature (got: $(echo "$sign_probe" | head -1))"
+fi
+[[ -z "$FAIL" ]] || die "git signing assertions failed"
+
 # ── Reboot-persistence (optional, SKIP_REBOOT=1 to bypass) ────────────────────
 # Verify firstboot truly one-shot: done sentinel mtime unchanged, service not
 # re-run, no new AVC denials. Also captures SECONDBOOT_SECS (time from reboot

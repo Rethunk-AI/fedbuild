@@ -202,6 +202,41 @@ cp /usr/share/bastion-vm-firstboot/agent-claude.md ~/.claude/CLAUDE.md
 cp /usr/share/bastion-vm-firstboot/agent-settings.json ~/.claude/settings.json
 log "Claude Code configuration written to ~/.claude/"
 
+# ── Git SSH signing (per-VM keypair) ──────────────────────────────────────────
+# Generate a per-VM ed25519 key and configure git to SSH-sign every commit and
+# tag. Baked /etc/gitconfig sets identity; user-level ~/.gitconfig layers on
+# the signing config (user-level wins over system for overlapping keys).
+#
+# Why per-VM: a shared key would conflate agent commits across machines; a
+# fresh key per-VM keeps provenance attributable. Trade-off: allowed_signers
+# on the verifying side needs to accept multiple keys for the same email, or
+# trust rotates per rebuild.
+section_start git_signing
+SIGNING_KEY="$HOME/.ssh/id_ed25519_signing"
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+if [[ ! -f "$SIGNING_KEY" ]]; then
+    log "Generating per-VM SSH signing key: $SIGNING_KEY"
+    ssh-keygen -t ed25519 -f "$SIGNING_KEY" -N "" -C "bastion-agent@rethunk.tech" -q
+    chmod 600 "$SIGNING_KEY"
+else
+    log "Reusing existing signing key: $SIGNING_KEY"
+fi
+ALLOWED_SIGNERS="$HOME/.ssh/allowed_signers"
+PUBKEY=$(cat "$SIGNING_KEY.pub")
+LINE="bastion-agent@rethunk.tech $PUBKEY"
+# Idempotent insert.
+if ! grep -qxF "$LINE" "$ALLOWED_SIGNERS" 2>/dev/null; then
+    printf '%s\n' "$LINE" >> "$ALLOWED_SIGNERS"
+fi
+chmod 644 "$ALLOWED_SIGNERS"
+git config --global gpg.format ssh
+git config --global user.signingkey "$SIGNING_KEY.pub"
+git config --global gpg.ssh.allowedSignersFile "$ALLOWED_SIGNERS"
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true
+log "Git SSH signing enabled for commits + tags (fingerprint: $(ssh-keygen -lf "$SIGNING_KEY.pub" | awk '{print $2}'))"
+section_end
+
 # ── Cleanup: reclaim disk after deferred brew cleanup + dnf caches ────────────
 # HOMEBREW_NO_INSTALL_CLEANUP=1 above skipped per-install cleanup for speed;
 # we run it once here at the end. dnf metadata/cache are redundant in a baked
