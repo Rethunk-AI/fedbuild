@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT

@@ -1,6 +1,6 @@
 name = "fedora-43-devbox"
 description = "Fedora 43 minimal image — Git, Node.js, and Go development"
-version = "0.6.0"
+version = "0.6.1"
 distro = "fedora-43"
 
 # All packages use version = "*" — always pull the latest available.

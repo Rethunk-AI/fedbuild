@@ -12,16 +12,34 @@ SENTINEL_DIR=/var/lib/bastion-vm-firstboot
 BREW_INSTALLER=""
 log() { echo "[firstboot] $(date -Iseconds) $*"; }
 
+# ── Serial-console marker protocol ────────────────────────────────────────────
+# Structured lines consumed by tests/smoke.sh via the QEMU serial log.
+# StandardOutput=journal+console on the unit routes stdout to ttyS0, so these
+# hit the captured serial log directly — no SSH round-trip needed to diagnose
+# firstboot progress or failure.
+#   FEDBUILD_MARK: <event>        — lifecycle/section events
+#   FEDBUILD_TOOL: <name>=<ver>   — one per tool at end-of-run
+#   FEDBUILD_READY                — terminal success marker
+#   FEDBUILD_FAILED <rc>          — terminal failure marker (written from trap)
+# Keep the prefix rare and exact-match; smoke greps anchored lines only.
+mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; }
+
 # ── Timing instrumentation ────────────────────────────────────────────────────
 # Per-section SECONDS deltas; summary printed at end for journal-grep friendliness.
 declare -A TIMINGS
 SECTION_ORDER=()
-section_start() { SECTION_T0=$SECONDS; SECTION_NAME="$1"; log "▶ $SECTION_NAME"; }
+section_start() {
+    SECTION_T0=$SECONDS
+    SECTION_NAME="$1"
+    log "▶ $SECTION_NAME"
+    mark "section-begin $SECTION_NAME"
+}
 section_end()   {
     local dur=$((SECONDS - SECTION_T0))
     TIMINGS[$SECTION_NAME]=$dur
     SECTION_ORDER+=("$SECTION_NAME")
     log "◀ $SECTION_NAME (${dur}s)"
+    mark "section-end $SECTION_NAME ${dur}s"
 }
 print_timing_summary() {
     log "──── Timing summary ────"
@@ -45,11 +63,14 @@ on_exit() {
     if [[ $rc -ne 0 ]]; then
         log "FAILED (exit $rc) — writing failure sentinel"
         touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
+        # Terminal marker — smoke greps this to fail-fast instead of timing out.
+        printf 'FEDBUILD_FAILED %d\n' "$rc"
     fi
 }
 trap on_exit EXIT
 
 log "Starting"
+mark "firstboot-start"
 
 # ── Environment (profile.d not sourced by systemd) ────────────────────────────
 export NPM_CONFIG_PREFIX="${HOME}/.npm-global"
@@ -272,6 +293,44 @@ log "Writing /var/log/fedbuild-ready.json"
 # shellcheck source=/dev/null
 . /etc/fedbuild-release 2>/dev/null || true
 tool_version() { command -v "$1" >/dev/null 2>&1 && "$@" 2>/dev/null | head -1 || echo "<missing>"; }
+
+# ── Emit FEDBUILD_TOOL markers ────────────────────────────────────────────────
+# Authoritative list of tools the smoke test will verify. Each tool runs its
+# --version (or equivalent) via `command -v` guard; missing tools emit
+# `<missing>` rather than <error>. One line per tool, stable ordering, so
+# smoke.sh can parse via awk '/^FEDBUILD_TOOL:/' without SSH round-trips.
+emit_tool() {
+    local label="$1" cmd="$2" bin head="$2" ver
+    # Strip leading VAR=value env prefixes (may chain), first remaining token is the binary.
+    # Mirrors smoke.sh log_version parsing so labels stay aligned.
+    while [[ "$head" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do head="${head#* }"; done
+    bin=${head%% *}
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        printf 'FEDBUILD_TOOL: %s=<missing>\n' "$label"
+        return
+    fi
+    ver=$(eval "$cmd" 2>&1 | awk 'NF{print;exit}') || ver="<error>"
+    printf 'FEDBUILD_TOOL: %s=%s\n' "$label" "${ver:-<empty>}"
+}
+mark "tools-begin"
+emit_tool claude     'claude --version'
+emit_tool gemini     'gemini --version'
+emit_tool git        'git --version'
+emit_tool gh         'gh --version'
+emit_tool go         'go version'
+emit_tool node       'node --version'
+emit_tool brew       'brew --version'
+emit_tool semgrep    'SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version'
+emit_tool actionlint 'actionlint -version'
+emit_tool buf        'buf --version'
+emit_tool kubectl    'kubectl version --client=true'
+emit_tool uv         'uv --version'
+emit_tool bun        'bun --version'
+emit_tool yarn       'yarn --version'
+emit_tool supabase   'supabase --version'
+emit_tool watchexec  'watchexec --version'
+mark "tools-end"
+
 ready_json=$(cat <<JSON
 {"name":"${NAME:-bastion-vm-firstboot}","version":"${VERSION:-unknown}","release":"${RELEASE:-unknown}","git_commit":"${GIT_COMMIT:-unknown}","install_date":"${INSTALL_DATE:-unknown}","firstboot_date":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","firstboot_secs":${SECONDS},"tools":{"claude":"$(tool_version claude --version)","gemini":"$(tool_version gemini --version)","brew":"$(brew --version 2>/dev/null | head -1)","node":"$(tool_version node --version)","go":"$(go version 2>/dev/null)"}}
 JSON
@@ -280,3 +339,5 @@ echo "$ready_json" | sudo tee /var/log/fedbuild-ready.json >/dev/null
 sudo chmod 0644 /var/log/fedbuild-ready.json
 
 log "Done"
+# Terminal success marker — emit LAST so smoke's serial-grep sees tools + JSON first.
+printf 'FEDBUILD_READY\n'
