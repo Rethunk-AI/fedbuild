@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -81,7 +81,11 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		--extra-repo https://pkg.cloudflare.com/cloudflared/rpm \
 		--output-dir $(OUTDIR)            \
 		minimal-raw-zst
+	cp -v $(RPM) $(OUTDIR)/
 	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
+	@cd $(OUTDIR) && for f in $$(basename $(RPM)) sbom.cdx.json sbom.spdx.json provenance.json; do \
+	     [ -f "$$f" ] && sha256sum "$$f" >> SHA256SUMS && echo "  + $$f"; \
+	 done; true
 	@echo "Wrote $(OUTDIR)/SHA256SUMS"
 	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
 	 stat -c%s "$$img" > $(SIZE_FILE); \
@@ -178,6 +182,39 @@ verify:
 		--certificate-oidc-issuer $(CERT_OIDC_ISSUER) \
 		$(SHA256SUMS_FILE)
 
+## sbom: generate CycloneDX + SPDX SBOMs from built image (requires syft)
+sbom:
+	@command -v syft >/dev/null 2>&1 || \
+		{ echo "ERROR: syft not found — https://github.com/anchore/syft"; exit 1; }
+	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
+	 test -n "$$img" || { echo "ERROR: no *.raw.zst in $(OUTDIR) — run: make image"; exit 1; }; \
+	 echo "Generating CycloneDX SBOM: $$img → $(OUTDIR)/sbom.cdx.json"; \
+	 syft "$$img" -o cyclonedx-json=$(OUTDIR)/sbom.cdx.json; \
+	 echo "Generating SPDX SBOM: $$img → $(OUTDIR)/sbom.spdx.json"; \
+	 syft "$$img" -o spdx-json=$(OUTDIR)/sbom.spdx.json; \
+	 echo "SBOMs written to $(OUTDIR)/"
+
+## attest: emit SLSA v1 provenance JSON + cosign keyless attest-blob (Sigstore OIDC)
+attest:
+	@command -v cosign >/dev/null 2>&1 || \
+		{ echo "ERROR: cosign not found — https://github.com/sigstore/cosign"; exit 1; }
+	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
+	 test -n "$$img" || { echo "ERROR: no *.raw.zst in $(OUTDIR) — run: make image"; exit 1; }; \
+	 img_digest=$$(sha256sum "$$img" | awk '{print $$1}'); \
+	 git_commit=$$(git rev-parse HEAD 2>/dev/null || echo "unknown"); \
+	 build_ts=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
+	 printf '{\n  "buildType": "https://fedbuild.rethunk.tech/make-image/v1",\n  "builder": {"id": "make image"},\n  "invocation": {"configSource": {"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}},\n  "materials": [{"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}, {"uri": "%s", "digest": {"sha256": "%s"}}],\n  "metadata": {"buildStartedOn": "%s"}\n}\n' \
+	     "$$git_commit" "$$git_commit" "$$(basename $$img)" "$$img_digest" "$$build_ts" \
+	     > $(OUTDIR)/provenance.json; \
+	 echo "Wrote $(OUTDIR)/provenance.json"; \
+	 cosign attest-blob --yes \
+	     --type slsaprovenance1 \
+	     --predicate $(OUTDIR)/provenance.json \
+	     --output-signature $(OUTDIR)/provenance.sig \
+	     --output-certificate $(OUTDIR)/provenance.pem \
+	     "$$img"; \
+	 echo "Signed $(OUTDIR)/provenance.json → $(OUTDIR)/provenance.sig + $(OUTDIR)/provenance.pem"
+
 ## diff-packages: compare blueprint-declared RPMs against rpm -qa on a running VM
 ## (override: VM_HOST=user@localhost VM_SSH_PORT=2222 SSH_KEY=keys/authorized_key)
 diff-packages:
@@ -189,6 +226,46 @@ smoke:
 	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
 		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
 	bash tests/smoke.sh $(OUTDIR)
+
+## baseline-record: append a row to tests/baselines.csv from env vars
+## Usage: BUILD_SECS=30 IMAGE_BYTES=1234567890 FIRSTBOOT_SECS=900 SECONDBOOT_SECS=5 make baseline-record
+BASELINES_CSV := $(FEDBUILD)/tests/baselines.csv
+baseline-record:
+	@printf '%s,%s,%s,%s,%s,%s\n' \
+	     "$$(git rev-parse HEAD 2>/dev/null || echo '')" \
+	     "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	     "$${BUILD_SECS:-}" \
+	     "$${IMAGE_BYTES:-}" \
+	     "$${FIRSTBOOT_SECS:-}" \
+	     "$${SECONDBOOT_SECS:-}" \
+	     >> $(BASELINES_CSV)
+	@echo "Appended row to $(BASELINES_CSV)"
+
+## smoke-rerun: re-run smoke test against an existing image (idempotency check)
+smoke-rerun:
+	@test -f tests/smoke-rerun.sh || \
+		{ echo "ERROR: tests/smoke-rerun.sh not found — see Subagent C's PR"; exit 1; }
+	bash tests/smoke-rerun.sh $(OUTDIR)
+
+## check-boot-time: fail if latest firstboot_secs > median of last 5 entries * 1.2
+BOOT_TIME_N ?= 5
+check-boot-time:
+	@test -f $(BASELINES_CSV) || { echo "ERROR: $(BASELINES_CSV) not found — run: make baseline-record"; exit 1; }
+	@awk -F, 'NR==1{next} $$6!=""{rows[++n]=$$6} END { \
+	     if (n < 3) { print "INFO: fewer than 3 firstboot_secs entries (" n ") — skipping boot-time check"; exit 0; } \
+	     window = (n < $(BOOT_TIME_N)) ? n : $(BOOT_TIME_N); \
+	     start = n - window + 1; \
+	     for (i=start; i<=n; i++) vals[i-start+1]=rows[i]; \
+	     asort(vals, sorted); \
+	     mid = int((window+1)/2); \
+	     median = (window%2==1) ? sorted[mid] : (sorted[mid]+sorted[mid+1])/2.0; \
+	     latest = rows[n]; \
+	     limit = median * 1.2; \
+	     printf "Latest firstboot_secs: %s  median(%d): %.1f  limit: %.1f\n", latest, window, median, limit; \
+	     if (latest+0 > limit) { \
+	         printf "ERROR: firstboot_secs %s exceeds median*1.2 (%.1f)\n", latest, limit; exit 1; \
+	     } else { print "OK: within budget"; } \
+	 }' $(BASELINES_CSV)
 
 ## clean: remove rpmbuild tree, local repo, and effective blueprint
 clean:
