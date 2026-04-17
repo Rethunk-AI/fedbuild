@@ -156,47 +156,56 @@ while :; do
     log "  still waiting..."
 done
 
-# ── Assert tools ──────────────────────────────────────────────────────────────
-log "Asserting tool presence"
+# ── Tool versions (combined presence + version check) ─────────────────────────
+# A missing binary means log_version prints "<MISSING>" and marks FAIL — so
+# this single section replaces the old separate "Asserting tool presence" loop.
+log "Tool versions"
 FAIL=""
-TOOLS=(claude gemini git gh go node brew semgrep actionlint buf kubectl uv bun yarn supabase watchexec)
-for tool in "${TOOLS[@]}"; do
-    # shellcheck disable=SC2029  # $tool intentionally expands client-side
-    if ssh "${SSH_OPTS[@]}" "command -v $tool" >/dev/null 2>&1; then
-        status "✓" "$tool"
-    else
-        status "✗" "$tool"
-        FAIL=1
-    fi
-done
-[[ -z "$FAIL" ]] || die "one or more tools missing"
-
-# ── Log installed versions ────────────────────────────────────────────────────
-# Captures actual version strings so partial/stale installs are visible in CI.
-log "Logging installed versions"
-# log_version <label> <remote-cmd> — runs remote-cmd via SSH, logs first non-empty line.
-# Per-tool cmd lets us handle flag quirks (go version, semgrep --version to stderr, etc.).
+# log_version <label> <remote-cmd> — runs remote-cmd via SSH; records MISSING
+# when the binary isn't on PATH, otherwise prints first non-empty line.
 log_version() {
-    local label="$1" cmd="$2" actual
+    local label="$1" cmd="$2" bin actual
+    bin=${cmd%% *}                        # first whitespace-delimited token
+    bin=${bin#*=}                         # strip leading VAR=value env prefix if present
+    # shellcheck disable=SC2029
+    if ! ssh "${SSH_OPTS[@]}" "command -v $bin" >/dev/null 2>&1; then
+        row "$label" "<MISSING>"
+        FAIL=1
+        return
+    fi
     # shellcheck disable=SC2029
     actual=$(ssh "${SSH_OPTS[@]}" "$cmd 2>&1 | awk 'NF{print;exit}'" 2>/dev/null) || actual="<error>"
     row "$label" "${actual:-<no output>}"
 }
 log_version claude     'claude --version'
-log_version node       'node --version'
+log_version gemini     'gemini --version'
+log_version git        'git --version'
+log_version gh         'gh --version'
 log_version go         'go version'
-log_version buf        'buf --version'
+log_version node       'node --version'
+log_version brew       'brew --version'
 log_version semgrep    'SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version'
 log_version actionlint 'actionlint -version'
-log_version gemini     'gemini --version'
+log_version buf        'buf --version'
+log_version kubectl    'kubectl version --client=true'
+log_version uv         'uv --version'
+log_version bun        'bun --version'
+log_version yarn       'yarn --version'
+log_version supabase   'supabase --version'
+log_version watchexec  'watchexec --version'
+[[ -z "$FAIL" ]] || die "one or more tools missing"
 
-# ── Dump firstboot timing summary ─────────────────────────────────────────────
-# Pulls the "Timing summary" block out of journald so perf regressions show up
-# in the smoke log, not only inside the VM.
-log "Firstboot timing summary"
-ssh "${SSH_OPTS[@]}" \
-    "journalctl -u bastion-vm-firstboot --no-pager -o cat | sed -n '/Timing summary/,\$p'" \
-    2>/dev/null | sed 's/^/  /' || log "  (no summary captured)"
+# ── Dump firstboot journal on success ─────────────────────────────────────────
+# Full journal (not just timing summary) so any warnings, brew bundle output,
+# and per-section durations are visible alongside the smoke log.
+SUCCESS_LOG="${SUCCESS_LOG:-$OUTDIR/smoke-firstboot.log}"
+log "Capturing firstboot journal → $SUCCESS_LOG"
+ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager -o cat" \
+    > "$SUCCESS_LOG" 2>&1 || log "  (journal capture failed)"
+if [[ -s "$SUCCESS_LOG" ]]; then
+    log "Firstboot timing summary"
+    sed -n '/Timing summary/,$p' "$SUCCESS_LOG" | sed 's/^/  /'
+fi
 
 # ── Assert Claude config ───────────────────────────────────────────────────────
 log "Asserting ~/.claude/ config"

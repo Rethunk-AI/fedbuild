@@ -20,3 +20,6 @@ export PAGER=less
 # npm global installs go under home, not /usr
 export NPM_CONFIG_PREFIX="${HOME}/.npm-global"
 [[ ":${PATH}:" != *":${HOME}/.npm-global/bin:"* ]] && export PATH="${PATH}:${HOME}/.npm-global/bin"
+
+# Suppress semgrep's network update-check banner (brew keeps it up to date).
+export SEMGREP_ENABLE_VERSION_CHECK=0
