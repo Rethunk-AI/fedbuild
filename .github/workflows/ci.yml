@@ -33,7 +33,7 @@ jobs:
             dnf-f43-
 
       - name: Install build deps
-        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build systemd-rpm-macros git make yq python3-pip
+        run: dnf install -y --setopt=install_weak_deps=False --setopt=keepcache=True golang shellcheck rpmlint rpm-build systemd-rpm-macros git make yq python3-pip systemd
 
       - name: Install actionlint
         run: GOBIN=/usr/local/bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
@@ -49,3 +49,12 @@ jobs:
 
       - name: rpmlint
         run: make lint
+
+      - name: systemd-analyze security (advisory)
+        # Advisory-only: prints exposure score for the firstboot unit.
+        # Does not fail the build — hardening is constrained by sudo/Ruby/dnf needs.
+        # --offline=true scores the file directly without loading it as a unit.
+        continue-on-error: true
+        run: |
+          systemd-analyze security --offline=true --no-pager \
+            bastion-vm-firstboot/SOURCES/bastion-vm-firstboot.service || true
