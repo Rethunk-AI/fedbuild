@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift
 
 FEDBUILD  := $(CURDIR)
 TOPDIR    := $(FEDBUILD)/rpmbuild
@@ -97,7 +97,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
 check: check-versions check-settings
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh tests/brew-drift.sh
 	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
@@ -147,7 +147,7 @@ check-versions:
 
 ## shellcheck: lint all shell scripts in SOURCES and tests/
 shellcheck:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh
+	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh tests/brew-drift.sh
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
@@ -235,6 +235,13 @@ cve-scan:
 	@test -f $(SBOM) || { echo "ERROR: $(SBOM) not found — run: make sbom"; exit 1; }
 	@test -f $(CVE_ALLOWLIST) || { echo "ERROR: $(CVE_ALLOWLIST) not found"; exit 1; }
 	grype sbom:$(SBOM) -c $(CVE_ALLOWLIST)
+
+## brew-drift: diff two brew-versions.txt snapshots → added/removed/bumped
+## Usage: OLD=path/to/old/brew-versions.txt NEW=path/to/new/brew-versions.txt make brew-drift
+brew-drift:
+	@test -n "$(OLD)" || { echo "ERROR: set OLD=<path to older brew-versions.txt>"; exit 1; }
+	@test -n "$(NEW)" || { echo "ERROR: set NEW=<path to newer brew-versions.txt>"; exit 1; }
+	@bash tests/brew-drift.sh "$(OLD)" "$(NEW)"
 
 ## diff-packages: compare blueprint-declared RPMs against rpm -qa on a running VM
 ## (override: VM_HOST=user@localhost VM_SSH_PORT=2222 SSH_KEY=keys/authorized_key)

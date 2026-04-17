@@ -175,6 +175,19 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
         log "WARN: brew bundle dump failed — lock record not written"
     fi
     rm -f "$_lock_tmp"
+
+    # Versions record: brew bundle dump lists formulae but not versions;
+    # `brew list --versions` gives "formula version..." per line, which
+    # tests/brew-drift.sh diffs across boots to surface upstream bumps.
+    log "Dumping brew-versions.txt (formula versions snapshot)"
+    _ver_tmp=$(mktemp /tmp/brew-versions.XXXXXX)
+    if brew list --versions | sort > "$_ver_tmp"; then
+        sudo install -m 0644 "$_ver_tmp" "${SENTINEL_DIR}/brew-versions.txt"
+        log "brew-versions.txt written to ${SENTINEL_DIR}/brew-versions.txt"
+    else
+        log "WARN: brew list --versions failed — versions record not written"
+    fi
+    rm -f "$_ver_tmp"
 fi
 section_end
 
