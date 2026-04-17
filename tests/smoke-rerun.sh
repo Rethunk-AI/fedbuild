@@ -137,45 +137,39 @@ done
 SSH_UP=1
 log "SSH up"
 
-# wait_firstboot <label>: waits for done/failed sentinel; returns FIRSTBOOT_SECS in named var.
-# Usage: wait_firstboot "first" → sets FIRSTBOOT_SECS
-#        wait_firstboot "second" → sets SECONDBOOT_SECS
-wait_sentinel() {
-    local label="$1" var="$2"
-    log "Waiting for ${label} firstboot sentinel (up to ${TIMEOUT_FIRSTBOOT}s)"
-    local start
+# wait_marker <label> <n> <var>: waits for the Nth FEDBUILD_READY on serial;
+# fails on the Nth FEDBUILD_FAILED. N=1 for first boot, N=2 for second run
+# after the service restart. Uses tail -F -n +1 so awk sees the full log
+# history — restart-run REREADs past READYs but only exits once count==N.
+#
+# Elapsed time is from call start (post-restart), so SECONDBOOT_SECS reflects
+# restart→ready, not total. No SSH dependency: relies on journal+console
+# routing in the unit file.
+wait_marker() {
+    local label="$1" n="$2" var="$3" start rc elapsed
+    log "Waiting for ${label} FEDBUILD_READY (occurrence #${n}, up to ${TIMEOUT_FIRSTBOOT}s)"
     start=$(date +%s)
-    local deadline
-    deadline=$(( start + TIMEOUT_FIRSTBOOT ))
-    while :; do
-        local state
-        state=$(ssh "${SSH_OPTS[@]}" '
-            if [ -f /var/lib/bastion-vm-firstboot/failed ]; then echo failed
-            elif [ -f /var/lib/bastion-vm-firstboot/done ]; then echo done
-            else echo waiting
-            fi' 2>/dev/null || echo waiting)
-        case "$state" in
-            done)
-                local elapsed=$(( $(date +%s) - start ))
-                log "${label} firstboot done in ${elapsed}s"
-                printf -v "$var" '%s' "$elapsed"
-                break
-                ;;
-            failed)
-                log "Dumping ${label} firstboot journal for diagnostics:"
-                ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
-                die "${label} firstboot failed sentinel present — see journal above"
-                ;;
-        esac
-        (( $(date +%s) < deadline )) || die "${label} firstboot did not complete within ${TIMEOUT_FIRSTBOOT}s"
-        sleep 15
-        log "  still waiting..."
-    done
+    set +e
+    timeout "$TIMEOUT_FIRSTBOOT" awk -v want="$n" '
+        /^FEDBUILD_READY/  { ready++;   if (ready  >= want) { print; exit 0 } }
+        /^FEDBUILD_FAILED/ { failed++;  if (failed >= want) { print; exit 1 } }
+    ' < <(tail -F -n +1 "$SERIAL_LOG" 2>/dev/null) >/dev/null
+    rc=$?
+    set -e
+    case "$rc" in
+        0)   ;;
+        1)   die "${label} FEDBUILD_FAILED marker seen — see [vm] stream above" ;;
+        124) die "${label} FEDBUILD_READY #${n} not seen within ${TIMEOUT_FIRSTBOOT}s" ;;
+        *)   die "${label} serial wait returned unexpected rc=${rc}" ;;
+    esac
+    elapsed=$(( $(date +%s) - start ))
+    log "${label} ready in ${elapsed}s"
+    printf -v "$var" '%s' "$elapsed"
 }
 
 # ── First boot ────────────────────────────────────────────────────────────────
 FIRSTBOOT_SECS=0
-wait_sentinel "first" FIRSTBOOT_SECS
+wait_marker "first" 1 FIRSTBOOT_SECS
 
 log "Capturing first-boot journal → $RERUN_LOG"
 {
@@ -206,7 +200,7 @@ ssh "${SSH_OPTS[@]}" "sudo systemctl restart bastion-vm-firstboot.service"
 
 # ── Second boot ───────────────────────────────────────────────────────────────
 SECONDBOOT_SECS=0
-wait_sentinel "second" SECONDBOOT_SECS
+wait_marker "second" 2 SECONDBOOT_SECS
 
 log "Capturing second-boot journal → $RERUN_LOG"
 {

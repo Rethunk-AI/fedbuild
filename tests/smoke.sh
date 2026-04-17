@@ -181,48 +181,32 @@ SSH_UP=1
 BOOT_SECS=$(( $(date +%s) - START_EPOCH ))
 log "SSH up (${BOOT_SECS}s from start)"
 
-# ── Wait for firstboot sentinel ───────────────────────────────────────────────
-# Polls both 'done' (success) and 'failed' (error) so a broken firstboot
-# aborts the smoke test in seconds instead of waiting out TIMEOUT_FIRSTBOOT.
-# Progress indicator: spinner + elapsed time on stderr when stderr is a TTY,
-# so `make smoke | tee log` animates live but the log stays clean.
-log "Waiting for firstboot sentinel (up to ${TIMEOUT_FIRSTBOOT}s)"
+# ── Wait for FEDBUILD_READY on serial ─────────────────────────────────────────
+# firstboot emits FEDBUILD_READY (success) or FEDBUILD_FAILED <rc> (failure)
+# on stdout, which the service routes to ttyS0 via journal+console — so it
+# lands directly in $SERIAL_LOG without any SSH round-trip. awk exits 0 on
+# READY, 1 on FAILED, and `timeout` returns 124 on wall-clock expiry.
+#
+# The live [vm] tail (backgrounded above) already streams firstboot progress
+# to the operator, so we don't need a spinner or spare journal dump here —
+# failures are visible inline as they happen.
+log "Waiting for FEDBUILD_READY on serial (up to ${TIMEOUT_FIRSTBOOT}s)"
 fb_start=$(date +%s)
-deadline=$(( fb_start + TIMEOUT_FIRSTBOOT ))
-spin=('|' '/' '-' "\\")
-spin_i=0
-tty=0; [[ -t 2 ]] && tty=1
-# Use 'if' not '&&' — under `set -e` a false arithmetic test at end of the
-# function would make clear_spin return non-zero and kill the script.
-clear_spin() { if (( tty )); then printf '\r\033[K' >&2; fi; }
-while :; do
-    state=$(ssh "${SSH_OPTS[@]}" '
-        if [ -f /var/lib/bastion-vm-firstboot/failed ]; then echo failed
-        elif [ -f /var/lib/bastion-vm-firstboot/done ]; then echo done
-        else echo waiting
-        fi' 2>/dev/null || echo waiting)
-    case "$state" in
-        done) clear_spin; break ;;
-        failed)
-            clear_spin
-            log "Dumping firstboot journal for diagnostics:"
-            ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager" 2>/dev/null || true
-            die "firstboot failed sentinel present — see journal above"
-            ;;
-    esac
-    (( $(date +%s) < deadline )) || { clear_spin; die "firstboot did not complete within ${TIMEOUT_FIRSTBOOT}s"; }
-    # Spinner animates every 1s while SSH polls every 5s (keeps load low).
-    for _ in 1 2 3 4 5; do
-        if (( tty )); then
-            elapsed=$(( $(date +%s) - fb_start ))
-            printf '\r  %s firstboot running... %ds elapsed' "${spin[spin_i % 4]}" "$elapsed" >&2
-            spin_i=$((spin_i + 1))
-        fi
-        sleep 1
-    done
-done
+set +e
+timeout "$TIMEOUT_FIRSTBOOT" awk '
+    /^FEDBUILD_READY/  { print; exit 0 }
+    /^FEDBUILD_FAILED/ { print; exit 1 }
+' < <(tail -F -n +1 "$SERIAL_LOG" 2>/dev/null) >/dev/null
+fb_rc=$?
+set -e
+case "$fb_rc" in
+    0)   : ;;  # READY seen — fall through
+    1)   die "FEDBUILD_FAILED marker seen on serial — see [vm] stream above" ;;
+    124) die "FEDBUILD_READY not seen within ${TIMEOUT_FIRSTBOOT}s" ;;
+    *)   die "serial wait returned unexpected rc=$fb_rc" ;;
+esac
 FIRSTBOOT_SECS=$(( $(date +%s) - fb_start ))
-log "firstboot done (${FIRSTBOOT_SECS}s)"
+log "FEDBUILD_READY seen (${FIRSTBOOT_SECS}s)"
 # Exported for make baseline-record consumption.
 export FIRSTBOOT_SECS
 
