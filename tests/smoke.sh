@@ -36,6 +36,8 @@ row() { printf '  %-12s %s\n' "$1" "$2"; }
 status() { printf '  %s %s\n' "$1" "$2"; }
 
 # dump_journal: grab firstboot journal to $FAIL_LOG (best-effort; SSH may be down)
+# Always called on exit (success or failure) via EXIT trap below — an empty
+# smoke-fail.log that isn't written means SSH never came up, not that we skipped.
 dump_journal() {
     [[ "$SSH_UP" == "1" ]] || { log "SSH never came up — no journal to capture"; return; }
     log "Capturing firstboot journal → $FAIL_LOG"
@@ -57,6 +59,10 @@ dump_qemu() {
 }
 
 die() {
+    # Route the error to both stdout (so wrappers capturing only stdout see it)
+    # and stderr (so TTY users see red exit context). Dumps run on stdout via
+    # log/sed prefixes; EXIT trap's cleanup will also call dump_journal.
+    log "ERROR: $*"
     echo "[smoke] ERROR: $*" >&2
     dump_qemu
     dump_serial
@@ -73,6 +79,9 @@ log "Image: $IMAGE"
 TMPIMAGE=$(mktemp /tmp/smoke-XXXXXX.raw)
 QEMU_PID=""
 cleanup() {
+    # Always grab the firstboot journal if SSH ever came up — avoids losing
+    # diagnostics when the script exits via die() vs normal path.
+    dump_journal 2>/dev/null || true
     rm -f "$TMPIMAGE" "${TMPVARS:-}"
     [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null || true
 }
@@ -217,6 +226,54 @@ if [[ -s "$SUCCESS_LOG" ]]; then
     # Extract "total" row (last column) for the final banner; tolerates spaces + 's' suffix.
     FIRSTBOOT_SECS=$(awk '/^ *total +[0-9]+s *$/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$SUCCESS_LOG")
 fi
+
+# ── SELinux enforcement ───────────────────────────────────────────────────────
+# VM images must ship with SELinux enforcing + targeted policy. A permissive
+# or disabled enforce state means a misconfiguration (kernel args, relabel,
+# /etc/selinux/config). Custom labels aren't expected — just the defaults.
+log "SELinux"
+selinux_mode=$(ssh "${SSH_OPTS[@]}" 'getenforce 2>/dev/null || echo unknown')
+selinux_policy=$(ssh "${SSH_OPTS[@]}" 'sestatus 2>/dev/null | awk -F: "/Loaded policy name/{gsub(/ /,\"\",\$2); print \$2}"' || true)
+row "enforce" "$selinux_mode"
+row "policy"  "${selinux_policy:-<unknown>}"
+if [[ "$selinux_mode" != "Enforcing" ]]; then
+    FAIL=1
+    status "✗" "SELinux not enforcing (got: $selinux_mode)"
+fi
+if [[ "$selinux_policy" != "targeted" ]]; then
+    FAIL=1
+    status "✗" "SELinux policy != targeted (got: ${selinux_policy:-<unknown>})"
+fi
+[[ -z "$FAIL" ]] || die "SELinux assertions failed"
+
+# ── Fedbuild release file ─────────────────────────────────────────────────────
+# /etc/fedbuild-release is emitted by the RPM %post at image-build time.
+# Missing file = RPM install regression.
+log "Release file"
+if ssh "${SSH_OPTS[@]}" 'test -f /etc/fedbuild-release' 2>/dev/null; then
+    release_line=$(ssh "${SSH_OPTS[@]}" 'cat /etc/fedbuild-release' 2>/dev/null | awk -F= '/^VERSION=/{v=$2}/^GIT_COMMIT=/{g=$2}END{printf "v%s @ %s", v, substr(g,1,10)}')
+    row "release" "$release_line"
+else
+    FAIL=1
+    status "✗" "/etc/fedbuild-release missing"
+fi
+
+# ── Ready JSON ────────────────────────────────────────────────────────────────
+# /var/log/fedbuild-ready.json is emitted by firstboot.sh on success.
+log "Ready JSON"
+if ssh "${SSH_OPTS[@]}" 'test -f /var/log/fedbuild-ready.json' 2>/dev/null; then
+    ready=$(ssh "${SSH_OPTS[@]}" 'cat /var/log/fedbuild-ready.json' 2>/dev/null)
+    if echo "$ready" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' 2>/dev/null; then
+        sub "valid JSON, $(echo -n "$ready" | wc -c) bytes"
+    else
+        FAIL=1
+        status "✗" "ready JSON parse failed"
+    fi
+else
+    FAIL=1
+    status "✗" "/var/log/fedbuild-ready.json missing"
+fi
+[[ -z "$FAIL" ]] || die "release/ready assertions failed"
 
 # ── Assert Claude config (show only failures unless VERBOSE=1) ───────────────
 log "Claude config"
