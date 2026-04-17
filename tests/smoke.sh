@@ -19,7 +19,13 @@ SSH_PORT="${SSH_PORT:-2222}"
 TIMEOUT_SSH="${TIMEOUT_SSH:-120}"
 TIMEOUT_FIRSTBOOT="${TIMEOUT_FIRSTBOOT:-1200}"
 FAIL_LOG="${FAIL_LOG:-$OUTDIR/smoke-fail.log}"
+VERBOSE="${VERBOSE:-0}"
 SSH_UP=0
+START_EPOCH=$(date +%s)
+BOOT_SECS=""        # populated when SSH comes up
+FIRSTBOOT_SECS=""   # populated from Timing summary "total" row
+TOOLS_OK=0
+TOOLS_TOTAL=0
 
 log() { echo "[smoke] $(date -Iseconds) $*"; }
 # sub: indented sub-line without prefix/timestamp — reduces noise under section headers.
@@ -130,7 +136,8 @@ until ssh "${SSH_OPTS[@]}" true 2>/dev/null; do
     sleep 5
 done
 SSH_UP=1
-log "SSH up"
+BOOT_SECS=$(( $(date +%s) - START_EPOCH ))
+log "SSH up (${BOOT_SECS}s from start)"
 
 # ── Wait for firstboot sentinel ───────────────────────────────────────────────
 # Polls both 'done' (success) and 'failed' (error) so a broken firstboot
@@ -167,6 +174,7 @@ log_version() {
     local label="$1" cmd="$2" bin actual
     bin=${cmd%% *}                        # first whitespace-delimited token
     bin=${bin#*=}                         # strip leading VAR=value env prefix if present
+    TOOLS_TOTAL=$((TOOLS_TOTAL+1))
     # shellcheck disable=SC2029
     if ! ssh "${SSH_OPTS[@]}" "command -v $bin" >/dev/null 2>&1; then
         row "$label" "<MISSING>"
@@ -175,6 +183,7 @@ log_version() {
     fi
     # shellcheck disable=SC2029
     actual=$(ssh "${SSH_OPTS[@]}" "$cmd 2>&1 | awk 'NF{print;exit}'" 2>/dev/null) || actual="<error>"
+    TOOLS_OK=$((TOOLS_OK+1))
     row "$label" "${actual:-<no output>}"
 }
 log_version claude     'claude --version'
@@ -205,25 +214,31 @@ ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager -o cat" \
 if [[ -s "$SUCCESS_LOG" ]]; then
     log "Firstboot timing summary"
     sed -n '/Timing summary/,$p' "$SUCCESS_LOG" | sed 's/^/  /'
+    # Extract "total" row (last column) for the final banner; tolerates spaces + 's' suffix.
+    FIRSTBOOT_SECS=$(awk '/^ *total +[0-9]+s *$/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$SUCCESS_LOG")
 fi
 
-# ── Assert Claude config ───────────────────────────────────────────────────────
-log "Asserting ~/.claude/ config"
+# ── Assert Claude config (show only failures unless VERBOSE=1) ───────────────
+log "Claude config"
+CONFIG_MISSING=0
 for f in /home/user/.claude/CLAUDE.md /home/user/.claude/settings.json; do
-    # shellcheck disable=SC2029  # $f intentionally expands client-side
+    # shellcheck disable=SC2029
     if ssh "${SSH_OPTS[@]}" "test -f $f" 2>/dev/null; then
-        status "✓" "$f"
+        [[ "$VERBOSE" == "1" ]] && status "✓" "$f"
     else
         status "✗" "$f"
+        CONFIG_MISSING=1
         FAIL=1
     fi
 done
+[[ "$CONFIG_MISSING" == 0 && "$VERBOSE" != "1" ]] && sub "2/2 present"
 [[ -z "$FAIL" ]] || die "Claude config files missing"
 
-# ── Shutdown ──────────────────────────────────────────────────────────────────
-log "Shutting down VM"
+# ── Shutdown + final banner ───────────────────────────────────────────────────
 ssh "${SSH_OPTS[@]}" "sudo poweroff" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
 
-log "Smoke test PASSED"
+TOTAL_SECS=$(( $(date +%s) - START_EPOCH ))
+IMG_SIZE=$(stat -c%s "$IMAGE" 2>/dev/null | awk '{printf "%.1fG", $1/1024/1024/1024}')
+log "PASSED  image=$(basename "$IMAGE")  size=${IMG_SIZE:-?}  boot=${BOOT_SECS:-?}s  firstboot=${FIRSTBOOT_SECS:-?}s  tools=${TOOLS_OK}/${TOOLS_TOTAL}  total=${TOTAL_SECS}s"
