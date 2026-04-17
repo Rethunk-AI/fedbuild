@@ -1,5 +1,5 @@
 Name:           bastion-vm-firstboot
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        First-boot setup for coding-agent VM
 License:        MIT
@@ -91,6 +91,17 @@ fi
 %attr(0640,root,root) %{_sysconfdir}/audit/rules.d/99-fedbuild.rules
 
 %changelog
+* Fri Apr 17 2026 Damon Blais <damon.blais@gmail.com> - 0.6.0-1
+- SBOM generation via syft (CycloneDX + SPDX) — make sbom
+- SLSA v1 provenance attestation via cosign — make attest
+- SHA256SUMS expanded to cover image + RPM + SBOM + provenance
+- Unified baselines tracking: tests/baselines.csv + make baseline-record
+- Boot-time regression check with tests/boot-time.baseline + make bless-boot-time
+- Idempotency smoke test: tests/smoke-rerun.sh + make smoke-rerun
+- Hardening: dnf-automatic (security-only), auditd (root-exec + sudoers watches)
+- firstboot dumps /var/lib/bastion-vm-firstboot/Brewfile.lock.json (record, not pin)
+- Expanded threat model + verification procedure in SECURITY.md
+
 * Thu Apr 16 2026 Damon Blais <damon.blais@gmail.com> - 0.4.0-1
 - Brewfile replaces per-package brew install loop in firstboot
 - Reproducible RPM via SOURCE_DATE_EPOCH (byte-identical builds)
