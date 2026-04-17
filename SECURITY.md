@@ -99,7 +99,7 @@ directly before filing a public issue.
   `-F auid=0`. `firstboot.sh`, brew, npm, and the agent all run as `user`
   (UID 1000) — none appear in the audit trail. Rules cover post-boot
   privileged activity only.
-- **`dnf-automatic` is install-only** — security-classified RPM updates are
+- **`dnf5-automatic` is install-only** — security-classified RPM updates are
   downloaded and applied automatically; kernel updates require a manual
   reboot. The operator is responsible for rebooting after kernel patches.
 - **Image is not reproducible** — the RPM build is reproducible
@@ -128,7 +128,7 @@ The built VM is designed for isolated local use:
 - SSH hardened: key-only auth, no root login, no X11, allowlist = `user`.
 - `auditd` watches root-exec + sudoers writes (see Post-Install Integrity
   Checks below).
-- `dnf-automatic` applies security-classified RPM updates (install-only).
+- `dnf5-automatic` applies security-classified RPM updates (install-only).
 
 ## Post-Install Integrity Checks
 
@@ -151,17 +151,22 @@ ausearch -k sudoers
 ausearch -k root-writes
 ```
 
-### dnf-automatic (security-only)
+### dnf5-automatic (security-only)
 
-`/etc/dnf/automatic.conf` configured with `upgrade_type = security`,
-`apply_updates = yes`. Runs via `dnf-automatic-install.timer`.
+`/etc/dnf/dnf5-plugins/automatic.conf` configured with
+`upgrade_type = security`, `apply_updates = yes`. Runs via
+`dnf5-automatic.timer`.
 
 - Downloads + installs security-classified RPM updates automatically.
 - Does NOT auto-reboot — kernel updates staged, operator must reboot.
 - Does NOT install non-security updates.
+- Package: `dnf5-plugin-automatic` (Fedora 43 replaced the legacy
+  `dnf-automatic` + `dnf-automatic-install.timer` with dnf5-native
+  equivalents; the old package is still resolvable via `Provides:` but
+  ships no `.timer` file).
 
-Check: `systemctl status dnf-automatic-install.timer` /
-`journalctl -u dnf-automatic-install`.
+Check: `systemctl status dnf5-automatic.timer` /
+`journalctl -u dnf5-automatic`.
 
 ### Brewfile.lock.json (per-boot record)
 

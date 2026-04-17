@@ -359,7 +359,7 @@ log "Hardening"
 FAIL=""
 auditd_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active auditd 2>/dev/null || echo missing')
 rules_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /etc/audit/rules.d/99-fedbuild.rules ]] && echo yes || echo no')
-dnfauto_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-enabled dnf-automatic-install.timer 2>/dev/null || echo missing')
+dnfauto_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-enabled dnf5-automatic.timer 2>/dev/null || echo missing')
 brewlock_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-vm-firstboot/Brewfile.lock.json ]] && echo yes || echo no')
 row "auditd"      "$auditd_state"
 row "audit rules" "$rules_present"
@@ -367,7 +367,7 @@ row "dnf-auto"    "$dnfauto_state"
 row "brew lock"   "$brewlock_present"
 [[ "$auditd_state"    == "active"  ]] || { status "✗" "auditd not active (got: $auditd_state)";                           FAIL=1; }
 [[ "$rules_present"   == "yes"     ]] || { status "✗" "audit rules file missing";                                         FAIL=1; }
-[[ "$dnfauto_state"   == "enabled" ]] || { status "✗" "dnf-automatic-install.timer not enabled (got: $dnfauto_state)";    FAIL=1; }
+[[ "$dnfauto_state"   == "enabled" ]] || { status "✗" "dnf5-automatic.timer not enabled (got: $dnfauto_state)";           FAIL=1; }
 [[ "$brewlock_present" == "yes"    ]] || { status "✗" "Brewfile.lock.json missing";                                       FAIL=1; }
 [[ -z "$FAIL" ]] || die "hardening assertions failed"
 
@@ -448,7 +448,7 @@ else
     done
     # Wait for system to reach "running" (not still in startup) so service
     # state queries below reflect final post-boot state, not mid-boot.
-    # 30s ceiling — degraded units (e.g. dnf-automatic-install on a stale
+    # 30s ceiling — degraded units (e.g. dnf5-automatic on a stale
     # network) would otherwise hang the whole smoke indefinitely.
     ssh "${SSH_OPTS[@]}" 'timeout 30 systemctl is-system-running --wait' \
         >/dev/null 2>&1 || true
