@@ -205,7 +205,10 @@ while :; do
         sleep 1
     done
 done
-log "firstboot done ($(( $(date +%s) - fb_start ))s)"
+FIRSTBOOT_SECS=$(( $(date +%s) - fb_start ))
+log "firstboot done (${FIRSTBOOT_SECS}s)"
+# Exported for make baseline-record consumption.
+export FIRSTBOOT_SECS
 
 # ── Tool versions (combined presence + version check) ─────────────────────────
 # A missing binary means log_version prints "<MISSING>" and marks FAIL — so
@@ -265,8 +268,6 @@ ssh "${SSH_OPTS[@]}" "journalctl -u bastion-vm-firstboot --no-pager -o cat" \
 if [[ -s "$SUCCESS_LOG" ]]; then
     log "Firstboot timing summary"
     sed -n '/Timing summary/,$p' "$SUCCESS_LOG" | sed 's/^/  /'
-    # Extract "total" row (last column) for the final banner; tolerates spaces + 's' suffix.
-    FIRSTBOOT_SECS=$(awk '/^ *total +[0-9]+s *$/ {gsub(/[^0-9]/,"",$2); print $2; exit}' "$SUCCESS_LOG")
 fi
 
 # ── SELinux enforcement ───────────────────────────────────────────────────────
@@ -316,6 +317,39 @@ else
     status "✗" "/var/log/fedbuild-ready.json missing"
 fi
 [[ -z "$FAIL" ]] || die "release/ready assertions failed"
+
+# ── Boot-time regression check ────────────────────────────────────────────────
+BOOT_TIME_BASELINE="${BOOT_TIME_BASELINE:-$(dirname "$0")/boot-time.baseline}"
+BOOT_BUDGET_PCT="${BOOT_BUDGET_PCT:-20}"
+if [[ ! -f "$BOOT_TIME_BASELINE" ]]; then
+    log "no baseline, skipping boot-time check (run: make bless-boot-time)"
+else
+    baseline_secs=$(cat "$BOOT_TIME_BASELINE")
+    limit=$(( baseline_secs + baseline_secs * BOOT_BUDGET_PCT / 100 ))
+    if (( FIRSTBOOT_SECS > limit )); then
+        die "firstboot time ${FIRSTBOOT_SECS}s exceeds baseline ${baseline_secs}s by >${BOOT_BUDGET_PCT}% (limit=${limit}s)"
+    else
+        delta_pct=$(awk -v a="$FIRSTBOOT_SECS" -v b="$baseline_secs" 'BEGIN{printf "%.1f", (a-b)*100.0/b}')
+        log "boot-time OK: ${FIRSTBOOT_SECS}s (baseline ${baseline_secs}s, ${delta_pct}%, budget +${BOOT_BUDGET_PCT}%)"
+    fi
+fi
+
+# ── Hardening (auditd + dnf-automatic + Brewfile.lock.json) ───────────────────
+log "Hardening"
+FAIL=""
+auditd_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active auditd 2>/dev/null || echo missing')
+rules_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /etc/audit/rules.d/99-fedbuild.rules ]] && echo yes || echo no')
+dnfauto_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-enabled dnf-automatic-install.timer 2>/dev/null || echo missing')
+brewlock_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-vm-firstboot/Brewfile.lock.json ]] && echo yes || echo no')
+row "auditd"      "$auditd_state"
+row "audit rules" "$rules_present"
+row "dnf-auto"    "$dnfauto_state"
+row "brew lock"   "$brewlock_present"
+[[ "$auditd_state"    == "active"  ]] || { status "✗" "auditd not active (got: $auditd_state)";                           FAIL=1; }
+[[ "$rules_present"   == "yes"     ]] || { status "✗" "audit rules file missing";                                         FAIL=1; }
+[[ "$dnfauto_state"   == "enabled" ]] || { status "✗" "dnf-automatic-install.timer not enabled (got: $dnfauto_state)";    FAIL=1; }
+[[ "$brewlock_present" == "yes"    ]] || { status "✗" "Brewfile.lock.json missing";                                       FAIL=1; }
+[[ -z "$FAIL" ]] || die "hardening assertions failed"
 
 # ── Assert Claude config (show only failures unless VERBOSE=1) ───────────────
 log "Claude config"
