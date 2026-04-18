@@ -99,7 +99,7 @@ Agent can override per-repo: `git config user.name / user.email`
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
 - `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
-- RPM builds reproducible (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across runs)
+- RPM builds reproducible *within a single tree* (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across rebuilds in the same `_sourcedir`). **Cross-tree byte-identity is not achievable — see § Reproducibility scope (BDA) below.**
 - Image size budget enforced by `make check-size` against `tests/size.baseline` (run `make bless-size` after intentional size changes)
 - Brew formulae list lives in `SOURCES/Brewfile` (consumed by `brew bundle` in firstboot) — do not hardcode brew packages in `firstboot.sh`
 - `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
@@ -112,6 +112,38 @@ Agent can override per-repo: `git config user.name / user.email`
 - `agent-settings.json` is schemaVersion-pinned (currently 1). Bump both `schemaVersion` in the JSON and the filename fragment in `schemas/agent-settings.v1.schema.json` together on incompatible revisions.
 - `tests/cve-allowlist.yaml` is grype's native config; entries require rationale + owner + review date. `make cve-scan` fails on any critical CVE not listed.
 - `tests/brew-drift.sh OLD NEW` diffs two `brew-versions.txt` snapshots (firstboot emits `/var/lib/bastion-vm-firstboot/brew-versions.txt` alongside `Brewfile.lock.json`).
+
+## Reproducibility scope (BDA — 2026-04-17)
+
+**One-line rule:** fedbuild guarantees *same-tree determinism*, not *cross-tree byte-identity*. Don't chase the latter.
+
+**What was tried and failed:** During the `multi-variant-refactor` spec execution, an attempt was made to verify that moving `bastion-vm-firstboot/` into `variants/devbox/bastion-vm-firstboot/` produced a byte-identical RPM (same SHA256). It did not — and that was the correct outcome, but only obvious in hindsight.
+
+**Why it can't work:** rpmbuild bakes the absolute `_sourcedir` path into the captured `%install` scriptlet that is stored in the SRPM header. That header is then hashed into the binary RPM's `Sourcesigmd5`, which is hashed into `Sha1header` and `Sha256header`. Net effect: changing the SOURCES path (whether by `git mv` or by cloning the repo to a different directory) cascades into different RPM bytes, even when SDE, git SHA, `_buildhost`, payload content, and SOURCES mtimes are all identical.
+
+**Concrete evidence captured:**
+- Pre-refactor (`bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `9473bc9f144af4af3b5c7d0f3f363e2ea5102d93a8445d266bb5be519afafa45`
+- Post-refactor (`variants/devbox/bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `085c67f310e284e2049ded8d01750dbebeef7a0119fe8fcaa9117a7112f95203`
+- Binary RPM payload (cpio) sha256: **identical** in both — `5b4bdd3b25b0c9200d034fb1a0862decfd9d92d1ec61cc56b2f23ab9d9a8b2dd`
+- SRPM payload (cpio) sha256: **identical** in both — `b595095720d73b99f74ab269985271caf5230d34f81734098beea9bfc45cbb42`
+- The only divergent header tags: `Sigmd5`, `Sha1header`, `Sha256header`, `Sourcesigmd5` — all derived hashes
+- `strings rpm | grep _sourcedir-path` showed the captured `%install` script with absolute paths
+
+**What this means in practice:**
+- Two developers cloning fedbuild to different paths (`/home/alice/fedbuild` vs `/home/bob/fedbuild`) will always produce different RPM bytes. This is normal for RPM and not a fedbuild bug.
+- A renamed-in-place file move (this refactor) shifts the path the same way and produces the same kind of difference.
+- Cosign signs the SHA256SUMS of artifact bytes, so the signature is path-dependent too. Re-sign per build.
+
+**What IS guaranteed (the actual reproducibility property):**
+- Same tree, same git SHA, same SDE, same `_sourcedir` → same RPM bytes across rebuilds. Verified.
+- Payload content is path-independent (the cpio archive of installed files doesn't depend on `_sourcedir`).
+
+**Anti-patterns to avoid in future fedbuild work:**
+- Don't gate refactors on cross-tree RPM byte-identity. Use rebuild-determinism instead (`make rpm; sha256sum; make clean; make rpm; sha256sum; diff`).
+- Don't chase mtime normalization (`touch -d "@$SDE"` on SOURCES) hoping it'll close the gap — `clamp_mtime_to_source_date_epoch 1` already handles installed-file mtimes; the SRPM's path embedding is what differs and `touch` can't fix that.
+- Don't compare RPMs built from different filesystem locations (`/var/tmp/foo` vs `/home/x/foo`) and expect equality. The `_topdir` and `_sourcedir` are baked in.
+
+**Before chasing reproducibility "issues" in future work, ask:** is this a real reproducibility regression (same tree, same inputs, different output → bug), or a path-sensitivity rediscovery (different tree, different `_sourcedir`, different output → expected)? If the latter, stop — RPM is doing its thing.
 
 ## CI
 
