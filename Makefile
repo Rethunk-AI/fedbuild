@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image publish-mirror smoke clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
+.PHONY: all deps rpm repo image publish-mirror smoke smoke-qcow2 clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
 
 # ── Variant dispatch ──────────────────────────────────────────────────────────
 # `make` (no arg) defaults to the devbox variant. Override with VARIANT=<name>.
@@ -314,11 +314,22 @@ diff-packages:
 	@bash $(VARIANT_TESTS)/diff-packages.sh
 
 ## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
+## Boots the raw.zst (field-deploy target) unless SMOKE_FORMAT=qcow2 is set.
 smoke:
 	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
 	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
 		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
 	bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
+
+## smoke-qcow2: boot the fedbuild-derived qcow2 and run the same assertions
+## as `smoke` — proves the ADCON runtime consumption path (bastion-qemu
+## launches this format via GrpcQemuAdapter). Requires `make image` to have
+## emitted the qcow2.
+smoke-qcow2:
+	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
+	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
+		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
+	SMOKE_FORMAT=qcow2 bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
 
 ## baseline-record: append a row to $(BASELINES_CSV) from env vars
 ## Usage: BUILD_SECS=30 IMAGE_BYTES=1234567890 FIRSTBOOT_SECS=900 SECONDBOOT_SECS=5 make baseline-record

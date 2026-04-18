@@ -75,11 +75,29 @@ die() {
 }
 
 # ── Locate image ─────────────────────────────────────────────────────────────
-IMAGE=$(find "$OUTDIR" -name '*.raw.zst' | sort | tail -1)
-[[ -n "$IMAGE" ]] || die "no .raw.zst image in $OUTDIR — run: make VARIANT=bastion-edge image"
-log "Image: $IMAGE"
+# SMOKE_FORMAT selects which output artifact to boot:
+#   raw   → decompress *.raw.zst (field-deploy dd target; default)
+#   qcow2 → copy *.qcow2 (ADCON runtime target; proves bastion-qemu consumption)
+SMOKE_FORMAT="${SMOKE_FORMAT:-raw}"
+case "$SMOKE_FORMAT" in
+    raw)
+        IMAGE=$(find "$OUTDIR" -name '*.raw.zst' | sort | tail -1)
+        [[ -n "$IMAGE" ]] || die "no .raw.zst image in $OUTDIR — run: make VARIANT=bastion-edge image"
+        TMPIMAGE=$(mktemp /tmp/smoke-edge-XXXXXX.raw)
+        DRIVE_FMT=raw
+        ;;
+    qcow2)
+        IMAGE=$(find "$OUTDIR" -maxdepth 1 -name '*.qcow2' | sort | tail -1)
+        [[ -n "$IMAGE" ]] || die "no .qcow2 in $OUTDIR — run: make VARIANT=bastion-edge image"
+        TMPIMAGE=$(mktemp /tmp/smoke-edge-XXXXXX.qcow2)
+        DRIVE_FMT=qcow2
+        ;;
+    *)
+        die "unsupported SMOKE_FORMAT='$SMOKE_FORMAT' (want: raw|qcow2)"
+        ;;
+esac
+log "Image: $IMAGE ($SMOKE_FORMAT)"
 
-TMPIMAGE=$(mktemp /tmp/smoke-edge-XXXXXX.raw)
 QEMU_PID=""
 cleanup() {
     dump_journal 2>/dev/null || true
@@ -89,8 +107,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
-zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
+if [[ "$SMOKE_FORMAT" == "raw" ]]; then
+    log "Decompressing $(basename "$IMAGE") → $TMPIMAGE"
+    zstd -df --quiet "$IMAGE" -o "$TMPIMAGE"
+else
+    log "Copying $(basename "$IMAGE") → $TMPIMAGE (reflink when supported)"
+    cp --reflink=auto "$IMAGE" "$TMPIMAGE"
+fi
 
 OVMF_CODE="${OVMF_CODE:-/usr/share/edk2/ovmf/OVMF_CODE.fd}"
 OVMF_VARS_SRC="${OVMF_VARS_SRC:-/usr/share/edk2/ovmf/OVMF_VARS.fd}"
@@ -116,7 +139,7 @@ qemu-system-x86_64 \
     -smp 2 \
     -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
     -drive "if=pflash,format=raw,file=$TMPVARS" \
-    -drive "file=$TMPIMAGE,format=raw,if=virtio" \
+    -drive "file=$TMPIMAGE,format=$DRIVE_FMT,if=virtio" \
     -net nic,model=virtio \
     -net "user,hostfwd=tcp::${SSH_PORT}-:22" \
     -display none \
