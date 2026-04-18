@@ -1,24 +1,43 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift
+.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
 
-FEDBUILD  := $(CURDIR)
-TOPDIR    := $(FEDBUILD)/rpmbuild
-REPODIR   := $(FEDBUILD)/repo
-OUTDIR    := $(FEDBUILD)/output
-SRCDIR    := $(FEDBUILD)/bastion-vm-firstboot/SOURCES
-SPECFILE  := $(FEDBUILD)/bastion-vm-firstboot/SPECS/bastion-vm-firstboot.spec
-BLUEPRINT         := $(FEDBUILD)/blueprint.toml
-KEYFILE           := $(FEDBUILD)/keys/authorized_key
-BLUEPRINT_EFFECTIVE := $(FEDBUILD)/blueprint.effective.toml
-SHA256SUMS_FILE   := $(OUTDIR)/SHA256SUMS
-SHA256SUMS_SIG    := $(OUTDIR)/SHA256SUMS.sig
-SHA256SUMS_CERT   := $(OUTDIR)/SHA256SUMS.pem
-SIZE_FILE         := $(OUTDIR)/SIZE
-SIZE_BASELINE     := $(FEDBUILD)/tests/size.baseline
-SIZE_BUDGET_PCT   ?= 10
-BOOT_TIME_BASELINE := $(FEDBUILD)/tests/boot-time.baseline
+# ── Variant dispatch ──────────────────────────────────────────────────────────
+# `make` (no arg) defaults to the devbox variant. Override with VARIANT=<name>.
+VARIANT       ?= devbox
+FEDBUILD      := $(CURDIR)
+VARIANT_DIR   := $(FEDBUILD)/variants/$(VARIANT)
+VARIANT_TESTS := $(VARIANT_DIR)/tests
 
-PKG_NAME    := bastion-vm-firstboot
+# Sanity: every variant must declare its own variant.mk.
+ifeq ($(wildcard $(VARIANT_DIR)/variant.mk),)
+$(error VARIANT='$(VARIANT)' is not defined — $(VARIANT_DIR)/variant.mk missing)
+endif
+
+# Pull in PKG_NAME, PKG_BLUEPRINT_NAME, PKG_IMAGE_FORMAT, EXTRA_REPOS.
+include $(VARIANT_DIR)/variant.mk
+
+# ── Variant-scoped paths ──────────────────────────────────────────────────────
+TOPDIR              := $(FEDBUILD)/rpmbuild
+REPODIR             := $(FEDBUILD)/repo/$(VARIANT)
+OUTDIR              := $(FEDBUILD)/output/$(VARIANT)
+SRCDIR              := $(VARIANT_DIR)/$(PKG_NAME)/SOURCES
+SPECFILE            := $(VARIANT_DIR)/$(PKG_NAME)/SPECS/$(PKG_NAME).spec
+BLUEPRINT           := $(VARIANT_DIR)/blueprint.toml
+KEYFILE             := $(FEDBUILD)/keys/authorized_key
+BLUEPRINT_EFFECTIVE := $(VARIANT_DIR)/blueprint.effective.toml
+EXTRA_RPMS_DIR      := $(VARIANT_DIR)/extra-rpms
+EXTRA_RPMS_MANIFEST := $(EXTRA_RPMS_DIR)/EXPECTED_SHA256
+SHA256SUMS_FILE     := $(OUTDIR)/SHA256SUMS
+SHA256SUMS_SIG      := $(OUTDIR)/SHA256SUMS.sig
+SHA256SUMS_CERT     := $(OUTDIR)/SHA256SUMS.pem
+SIZE_FILE           := $(OUTDIR)/SIZE
+SIZE_BASELINE       := $(VARIANT_TESTS)/size.baseline
+SIZE_BUDGET_PCT     ?= 10
+BOOT_TIME_BASELINE  := $(VARIANT_TESTS)/boot-time.baseline
+BASELINES_CSV       := $(VARIANT_TESTS)/baselines.csv
+CVE_ALLOWLIST       ?= $(VARIANT_TESTS)/cve-allowlist.yaml
+SBOM                ?= $(OUTDIR)/sbom.cdx.json
+
 PKG_VERSION := $(shell sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE))
 PKG_RELEASE := $(shell sed -n 's/^Release:[[:space:]]*\([^%]*\).*/\1/p' $(SPECFILE))
 DIST        := $(shell rpm -E '%{?dist}')
@@ -36,15 +55,16 @@ all: repo
 deps:
 	rpm -q createrepo_c >/dev/null 2>&1 || sudo dnf install -y createrepo_c
 
-## rpm: build bastion-vm-firstboot RPM from spec + sources
-## Reproducible build: SOURCE_DATE_EPOCH pins buildtime + clamps mtimes;
-## LC_ALL/TZ pinned for deterministic string formatting. Epoch is the ctime
-## of the last commit touching spec or sources (falls back to 'now' outside git).
+## rpm: build $(PKG_NAME) RPM from spec + sources
+## Reproducible: SOURCE_DATE_EPOCH pins buildtime + clamps mtimes; LC_ALL/TZ
+## pinned for deterministic string formatting. Operator may pin SDE via env
+## (overrides the git-log derivation) — required across renames + for external
+## reproducers; see spec F5/F5a.
 $(RPM): $(SPECFILE) $(SOURCES)
 	mkdir -p $(TOPDIR)/{BUILD,RPMS,SRPMS,SPECS,SOURCES}
-	@sde=$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null || date +%s); \
+	@sde=$${SOURCE_DATE_EPOCH:-$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null || date +%s)}; \
 	 sha=$$(git rev-parse HEAD 2>/dev/null || echo unknown); \
-	 echo "SOURCE_DATE_EPOCH=$$sde GIT_COMMIT=$$sha"; \
+	 echo "VARIANT=$(VARIANT) SOURCE_DATE_EPOCH=$$sde GIT_COMMIT=$$sha"; \
 	 env LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=$$sde rpmbuild \
 		--define "_topdir    $(TOPDIR)"                 \
 		--define "_sourcedir $(SRCDIR)"                 \
@@ -57,13 +77,26 @@ $(RPM): $(SPECFILE) $(SOURCES)
 
 rpm: $(RPM)
 
-## repo: copy RPM into local yum repo and index it (default target)
+## repo: copy fedbuild RPM (+ optional $(EXTRA_RPMS_DIR)/*.rpm) into local yum repo
+## extra-rpms supply chain (F7a): if EXPECTED_SHA256 manifest is present,
+## verify each upstream RPM matches before folding it in. Otherwise warn but
+## continue (operator accepts responsibility per variant README).
 $(REPO_MARKER): $(RPM)
 	@command -v createrepo >/dev/null 2>&1 || \
 		{ echo "createrepo_c not found — run: make deps"; exit 1; }
 	rm -rf $(REPODIR)
 	mkdir -p $(REPODIR)
 	cp -v $(RPM) $(REPODIR)/
+	@if [ -d $(EXTRA_RPMS_DIR) ] && [ -n "$$(find $(EXTRA_RPMS_DIR) -maxdepth 1 -name '*.rpm' -print -quit)" ]; then \
+	   if [ -f $(EXTRA_RPMS_MANIFEST) ] && [ -s $(EXTRA_RPMS_MANIFEST) ]; then \
+	     echo "Verifying extra-rpms against $(EXTRA_RPMS_MANIFEST)..."; \
+	     (cd $(EXTRA_RPMS_DIR) && sha256sum -c EXPECTED_SHA256) || \
+	         { echo "ERROR: extra-rpms checksum mismatch — refusing to build"; exit 1; }; \
+	   else \
+	     echo "WARN: $(EXTRA_RPMS_DIR) has RPMs but no EXPECTED_SHA256 manifest — see variant README for supply-chain posture"; \
+	   fi; \
+	   find $(EXTRA_RPMS_DIR) -maxdepth 1 -name '*.rpm' -exec cp -v {} $(REPODIR)/ \; ; \
+	 fi
 	createrepo $(REPODIR)
 
 repo: $(REPO_MARKER)
@@ -73,17 +106,16 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 	@test -f $(KEYFILE) || { echo "ERROR: keys/authorized_key not found"; exit 1; }
 	sed "s|ssh-ed25519 CHANGEME user@localhost|$$(cat $(KEYFILE))|" $(BLUEPRINT) > $(BLUEPRINT_EFFECTIVE)
 
-## image: build the Fedora 43 VM image (requires sudo)
+## image: build the variant's VM image (requires sudo)
 image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	mkdir -p $(OUTDIR)
 	sudo image-builder build              \
 		--distro     fedora-43            \
 		--blueprint  $(BLUEPRINT_EFFECTIVE) \
 		--extra-repo file://$(REPODIR)    \
-		--extra-repo https://packages.microsoft.com/yumrepos/vscode \
-		--extra-repo https://pkg.cloudflare.com/cloudflared/rpm \
+		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
-		minimal-raw-zst
+		$(PKG_IMAGE_FORMAT)
 	cp -v $(RPM) $(OUTDIR)/
 	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
 	@cd $(OUTDIR) && for f in $$(basename $(RPM)) sbom.cdx.json sbom.spdx.json provenance.json; do \
@@ -96,18 +128,20 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	@$(MAKE) --no-print-directory check-size
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
-check: check-versions check-settings
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh tests/brew-drift.sh
-	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "blueprint.toml: OK"
+check: check-versions check-settings shellcheck
+	@yq -p toml -oy '.' $(BLUEPRINT) >/dev/null && echo "$(VARIANT) blueprint.toml: OK"
 	actionlint $(FEDBUILD)/.github/workflows/ci.yml
 
-## check-settings: JSON-schema validate baked agent-settings.json
+## check-settings: JSON-schema validate baked agent-settings.json (devbox only — others may opt-in)
 check-settings:
-	@command -v check-jsonschema >/dev/null 2>&1 || \
-		{ echo "ERROR: check-jsonschema not found — pip install check-jsonschema"; exit 1; }
-	check-jsonschema \
-		--schemafile $(FEDBUILD)/schemas/agent-settings.schema.json \
-		$(SRCDIR)/agent-settings.json
+	@settings=$(SRCDIR)/agent-settings.json; \
+	 if [ -f $$settings ] && [ -f $(FEDBUILD)/schemas/agent-settings.schema.json ]; then \
+	   command -v check-jsonschema >/dev/null 2>&1 || \
+	     { echo "ERROR: check-jsonschema not found — pip install check-jsonschema"; exit 1; }; \
+	   check-jsonschema --schemafile $(FEDBUILD)/schemas/agent-settings.schema.json $$settings; \
+	 else \
+	   echo "check-settings: no agent-settings.json for VARIANT=$(VARIANT) — skipping"; \
+	 fi
 
 ## check-size: fail if built image exceeds baseline * (1 + SIZE_BUDGET_PCT/100)
 check-size:
@@ -122,32 +156,50 @@ check-size:
 	     echo "ERROR: image exceeds baseline by >$$pct% (cur=$$cur, limit=$$limit, delta=$$delta)"; exit 1; \
 	 fi
 
-## bless-size: promote current image size to baseline (commit tests/size.baseline)
+## bless-size: promote current image size to baseline (commit $(SIZE_BASELINE))
 bless-size:
 	@test -f $(SIZE_FILE) || { echo "ERROR: $(SIZE_FILE) missing — run: make image"; exit 1; }
 	cp $(SIZE_FILE) $(SIZE_BASELINE)
 	@echo "Baseline updated → $(SIZE_BASELINE) ($$(cat $(SIZE_BASELINE)) bytes)"
 
-## bless-boot-time: promote FIRSTBOOT_SECS to tests/boot-time.baseline
+## bless-boot-time: promote FIRSTBOOT_SECS to $(BOOT_TIME_BASELINE)
 ## Usage: FIRSTBOOT_SECS=<observed> make bless-boot-time
 bless-boot-time:
 	@test -n "$(FIRSTBOOT_SECS)" || { echo "ERROR: set FIRSTBOOT_SECS=<seconds> (observed from last successful: make smoke)"; exit 1; }
 	@echo "$(FIRSTBOOT_SECS)" > $(BOOT_TIME_BASELINE)
 	@echo "Boot-time baseline updated → $(BOOT_TIME_BASELINE) ($(FIRSTBOOT_SECS)s)"
 
-## check-versions: assert RPM spec Version and blueprint version match
+## check-versions: assert RPM spec Version and blueprint version match (this variant)
 check-versions:
 	@spec_ver=$$(sed -n 's/^Version:[[:space:]]*//p' $(SPECFILE)); \
 	 bp_ver=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
 	 if [ "$$spec_ver" != "$$bp_ver" ]; then \
-	     echo "ERROR: version mismatch — spec=$$spec_ver blueprint=$$bp_ver"; exit 1; \
+	     echo "ERROR: $(VARIANT) version mismatch — spec=$$spec_ver blueprint=$$bp_ver"; exit 1; \
 	 else \
-	     echo "Versions match: $$spec_ver"; \
+	     echo "$(VARIANT) versions match: $$spec_ver"; \
 	 fi
 
-## shellcheck: lint all shell scripts in SOURCES and tests/
+## check-versions-all: run check-versions for every discovered variant
+check-versions-all:
+	@for v in $$(ls $(FEDBUILD)/variants 2>/dev/null); do \
+	   $(MAKE) --no-print-directory VARIANT=$$v check-versions || exit 1; \
+	 done
+
+## variants: list known variants with their description (first non-blank line of variant README)
+variants:
+	@for d in $(FEDBUILD)/variants/*/; do \
+	   v=$$(basename $$d); \
+	   desc=$$(awk 'NR==1 && /^# / { sub(/^# /,""); print; exit } /^[A-Za-z]/ { print; exit }' $$d/README.md 2>/dev/null || echo "(no README)"); \
+	   printf "  %-20s %s\n" "$$v" "$$desc"; \
+	 done
+
+## shellcheck: lint shell scripts in this variant + repo-root scripts
 shellcheck:
-	shellcheck $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh tests/smoke.sh tests/smoke-rerun.sh tests/diff-packages.sh tests/brew-drift.sh
+	@scripts=""; \
+	 for s in $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh $(VARIANT_TESTS)/smoke.sh $(VARIANT_TESTS)/smoke-rerun.sh $(VARIANT_TESTS)/diff-packages.sh $(VARIANT_TESTS)/brew-drift.sh; do \
+	   [ -f $$s ] && scripts="$$scripts $$s"; \
+	 done; \
+	 if [ -n "$$scripts" ]; then shellcheck $$scripts; else echo "shellcheck: no scripts to check for VARIANT=$(VARIANT)"; fi
 
 ## lint: run rpmlint against the built RPM
 lint: $(RPM)
@@ -162,10 +214,10 @@ validate: $(BLUEPRINT_EFFECTIVE)
 	@! grep -q 'CHANGEME' $(BLUEPRINT_EFFECTIVE) && echo "  OK" || \
 		{ echo "  ERROR: SSH key not substituted in blueprint.effective.toml"; exit 1; }
 	@echo "Checking target image type..."
-	@image-builder list 2>/dev/null | grep -q 'fedora-43.*minimal-raw-zst.*x86_64' && echo "  OK" || \
-		{ echo "  ERROR: fedora-43 minimal-raw-zst x86_64 not found in image-builder list"; exit 1; }
+	@image-builder list 2>/dev/null | grep -q "fedora-43.*$(PKG_IMAGE_FORMAT).*x86_64" && echo "  OK" || \
+		{ echo "  ERROR: fedora-43 $(PKG_IMAGE_FORMAT) x86_64 not found in image-builder list"; exit 1; }
 
-## sign: cosign keyless-sign output/SHA256SUMS (Sigstore OIDC); writes .sig + .pem
+## sign: cosign keyless-sign $(SHA256SUMS_FILE) (Sigstore OIDC); writes .sig + .pem
 sign:
 	@command -v cosign >/dev/null 2>&1 || \
 		{ echo "ERROR: cosign not found — https://github.com/sigstore/cosign"; exit 1; }
@@ -213,7 +265,7 @@ attest:
 	 img_digest=$$(sha256sum "$$img" | awk '{print $$1}'); \
 	 git_commit=$$(git rev-parse HEAD 2>/dev/null || echo "unknown"); \
 	 build_ts=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
-	 printf '{\n  "buildType": "https://fedbuild.rethunk.tech/make-image/v1",\n  "builder": {"id": "make image"},\n  "invocation": {"configSource": {"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}},\n  "materials": [{"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}, {"uri": "%s", "digest": {"sha256": "%s"}}],\n  "metadata": {"buildStartedOn": "%s"}\n}\n' \
+	 printf '{\n  "buildType": "https://fedbuild.rethunk.tech/make-image/v1",\n  "builder": {"id": "make image VARIANT=$(VARIANT)"},\n  "invocation": {"configSource": {"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}},\n  "materials": [{"uri": "git+https://github.com/Rethunk-Tech/fedbuild", "digest": {"sha1": "%s"}}, {"uri": "%s", "digest": {"sha256": "%s"}}],\n  "metadata": {"buildStartedOn": "%s", "variant": "$(VARIANT)"}\n}\n' \
 	     "$$git_commit" "$$git_commit" "$$(basename $$img)" "$$img_digest" "$$build_ts" \
 	     > $(OUTDIR)/provenance.json; \
 	 echo "Wrote $(OUTDIR)/provenance.json"; \
@@ -225,10 +277,7 @@ attest:
 	     "$$img"; \
 	 echo "Signed $(OUTDIR)/provenance.json → $(OUTDIR)/provenance.sig + $(OUTDIR)/provenance.pem"
 
-## cve-scan: scan SBOM with grype; fail on critical CVEs not in tests/cve-allowlist.yaml
-## (override: CVE_ALLOWLIST=path/to/file.yaml  SBOM=path/to/sbom.cdx.json)
-CVE_ALLOWLIST ?= $(FEDBUILD)/tests/cve-allowlist.yaml
-SBOM          ?= $(OUTDIR)/sbom.cdx.json
+## cve-scan: scan SBOM with grype; fail on critical CVEs not in $(CVE_ALLOWLIST)
 cve-scan:
 	@command -v grype >/dev/null 2>&1 || \
 		{ echo "ERROR: grype not found — brew install grype"; exit 1; }
@@ -241,23 +290,22 @@ cve-scan:
 brew-drift:
 	@test -n "$(OLD)" || { echo "ERROR: set OLD=<path to older brew-versions.txt>"; exit 1; }
 	@test -n "$(NEW)" || { echo "ERROR: set NEW=<path to newer brew-versions.txt>"; exit 1; }
-	@bash tests/brew-drift.sh "$(OLD)" "$(NEW)"
+	@bash $(VARIANT_TESTS)/brew-drift.sh "$(OLD)" "$(NEW)"
 
 ## diff-packages: compare blueprint-declared RPMs against rpm -qa on a running VM
 ## (override: VM_HOST=user@localhost VM_SSH_PORT=2222 SSH_KEY=keys/authorized_key)
 diff-packages:
-	@bash tests/diff-packages.sh
+	@bash $(VARIANT_TESTS)/diff-packages.sh
 
 ## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
 smoke:
-	@test -d $(OUTDIR) || { echo "ERROR: output/ not found — run: make image first"; exit 1; }
+	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
 	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
 		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
-	bash tests/smoke.sh $(OUTDIR)
+	bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
 
-## baseline-record: append a row to tests/baselines.csv from env vars
+## baseline-record: append a row to $(BASELINES_CSV) from env vars
 ## Usage: BUILD_SECS=30 IMAGE_BYTES=1234567890 FIRSTBOOT_SECS=900 SECONDBOOT_SECS=5 make baseline-record
-BASELINES_CSV := $(FEDBUILD)/tests/baselines.csv
 baseline-record:
 	@printf '%s,%s,%s,%s,%s,%s\n' \
 	     "$$(git rev-parse HEAD 2>/dev/null || echo '')" \
@@ -271,9 +319,9 @@ baseline-record:
 
 ## smoke-rerun: re-run smoke test against an existing image (idempotency check)
 smoke-rerun:
-	@test -f tests/smoke-rerun.sh || \
-		{ echo "ERROR: tests/smoke-rerun.sh not found — see Subagent C's PR"; exit 1; }
-	bash tests/smoke-rerun.sh $(OUTDIR)
+	@test -f $(VARIANT_TESTS)/smoke-rerun.sh || \
+		{ echo "ERROR: $(VARIANT_TESTS)/smoke-rerun.sh not found"; exit 1; }
+	bash $(VARIANT_TESTS)/smoke-rerun.sh $(OUTDIR)
 
 ## check-boot-time: fail if latest firstboot_secs > median of last 5 entries * 1.2
 BOOT_TIME_N ?= 5
@@ -295,15 +343,15 @@ check-boot-time:
 	     } else { print "OK: within budget"; } \
 	 }' $(BASELINES_CSV)
 
-## clean: remove rpmbuild tree, local repo, and effective blueprint
+## clean: remove rpmbuild tree, this variant's local repo, and effective blueprint
 clean:
 	rm -rf $(TOPDIR) $(REPODIR) $(BLUEPRINT_EFFECTIVE)
 
-## distclean: clean + remove built images
+## distclean: clean + remove this variant's built images
 distclean: clean
 	rm -rf $(OUTDIR)
 
-## bump-patch: bump Z in X.Y.Z (spec Release=1, blueprint version lockstep)
+## bump-patch: bump Z in X.Y.Z (spec Release=1, blueprint version lockstep) — this variant only
 bump-patch:
 	@cur=$$(yq -p toml -oy '.version' $(BLUEPRINT)); \
 	 X=$$(echo "$$cur" | cut -d. -f1); \
@@ -312,7 +360,7 @@ bump-patch:
 	 new="$$X.$$Y.$$((Z+1))"; \
 	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
 	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
-	 echo "Bumped $$cur → $$new"; \
+	 echo "Bumped $(VARIANT) $$cur → $$new"; \
 	 $(MAKE) --no-print-directory check-versions
 
 ## bump-minor: bump Y in X.Y.Z (resets Z to 0)
@@ -323,7 +371,7 @@ bump-minor:
 	 new="$$X.$$((Y+1)).0"; \
 	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
 	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
-	 echo "Bumped $$cur → $$new"; \
+	 echo "Bumped $(VARIANT) $$cur → $$new"; \
 	 $(MAKE) --no-print-directory check-versions
 
 ## bump-major: bump X in X.Y.Z (resets Y.Z to 0.0)
@@ -333,7 +381,7 @@ bump-major:
 	 new="$$((X+1)).0.0"; \
 	 sed -i "s/^Version:[[:space:]].*/Version:        $$new/" $(SPECFILE); \
 	 sed -i "s/^version[[:space:]]*=.*/version = \"$$new\"/" $(BLUEPRINT); \
-	 echo "Bumped $$cur → $$new"; \
+	 echo "Bumped $(VARIANT) $$cur → $$new"; \
 	 $(MAKE) --no-print-directory check-versions
 
 ## changelog: regenerate CHANGELOG.md from Conventional Commits (via git-cliff + cliff.toml)
