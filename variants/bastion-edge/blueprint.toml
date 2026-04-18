@@ -87,3 +87,13 @@ data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUs
 path = "/etc/dnf/dnf5-plugins/automatic.conf"
 mode = "0644"
 data = "[commands]\nupgrade_type = security\ndownload_updates = yes\napply_updates = yes\nrandom_sleep = 900\n\n[emitters]\nemit_via = stdio\n"
+
+# Scoped NOPASSWD for smoke assertions.
+# edge-operator is in `wheel` (for TTY ops), but `wheel` on Fedora defaults to
+# password-required. Smoke drives reboot-persistence and AVC audits over SSH
+# with no TTY, so those specific calls need NOPASSWD. Whitelisted to exact
+# absolute paths — no shell escapes, no general sudo.
+[[customizations.files]]
+path = "/etc/sudoers.d/edge-operator-smoke"
+mode = "0440"
+data = "edge-operator ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/poweroff, /usr/sbin/ausearch\n"
