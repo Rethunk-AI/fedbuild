@@ -1,74 +1,104 @@
 # fedbuild
 
-Builds a Fedora 43 VM image for Bastion Agent (Claude Code) to run freely in an isolated VM.
-Two artifacts: `bastion-vm-firstboot` RPM + `fedora-43-devbox` image via image-builder.
+Builds reproducible Fedora 43 VM images for Bastion. **Multi-variant** since 2026-04-17 (`refactor(variants)` commit `22681d5`). One repo, one pipeline, multiple shipping artifacts driven by `make VARIANT=<name>`.
+
+Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox with Homebrew + dev toolchain. Other variants (e.g. `bastion-edge`) live as sibling subdirectories under `variants/`.
+
+## Variant dispatch
+
+```bash
+make variants               # list known variants with one-line description
+make                        # default: VARIANT=devbox
+make VARIANT=bastion-edge   # build the bastion-edge variant (when defined)
+```
+
+Every variant gets the same pipeline for free: reproducible RPM (SOURCE_DATE_EPOCH), createrepo with optional `extra-rpms/` pickup, image-builder, cosign-signed SHA256SUMS, syft SBOM, SLSA v1 provenance, size budget, smoke test.
 
 ## Commands
 
+All targets accept `VARIANT=<name>` (or default to `devbox`).
+
 ```bash
-make             # build RPM + local yum repo (default)
-make rpm         # build bastion-vm-firstboot RPM only
-make repo        # copy RPM into repo/ and run createrepo
-make image       # build Fedora 43 VM image (requires sudo + SSH key set)
-make check       # fast pre-push: shellcheck + TOML syntax + actionlint (no RPM build)
-make check-versions  # assert spec Version matches blueprint version field
-make check-settings  # JSON-schema validate agent-settings.json
-make check-size      # fail if image > baseline * (1 + SIZE_BUDGET_PCT/100)  [default 10%]
-make bless-size      # promote current image size to tests/size.baseline
-make shellcheck  # shellcheck all shell scripts in SOURCES
-make lint        # rpmlint on built RPM
-make validate    # check TOML syntax + SSH key + image-builder target
-make smoke       # boot VM in QEMU/KVM and assert firstboot + tool presence (requires built image)
-make diff-packages # drift: declared RPMs (blueprint) vs rpm -qa on running VM
-make sign        # cosign keyless-sign output/SHA256SUMS (Sigstore OIDC)
-make verify      # cosign verify SHA256SUMS (set CERT_IDENTITY + CERT_OIDC_ISSUER)
-make clean       # rm rpmbuild/ and repo/
-make distclean   # clean + rm output/
-make deps        # install createrepo_c if missing
-make bump-patch  # bump Z in X.Y.Z (spec + blueprint lockstep) → runs check-versions
-make bump-minor  # bump Y, reset Z=0
-make bump-major  # bump X, reset Y=0, Z=0
-make install-hooks  # install pre-commit hooks (requires pip install pre-commit)
-make changelog      # regenerate CHANGELOG.md from Conventional Commits (needs brew install git-cliff)
-make help        # print target descriptions
-make sbom        # generate syft SBOM (CycloneDX JSON + SPDX) from built image → output/
-make attest      # cosign attest-blob SLSA v1 provenance for image (requires OIDC session)
-make smoke-rerun # re-run smoke test against existing image without rebuilding
-make baseline-record  # append build/boot timing row to tests/baselines.csv (run after make smoke)
+make                  # build RPM + local yum repo (default goal: repo)
+make rpm              # build firstboot RPM only
+make repo             # copy RPM (+ extra-rpms/) into repo/$(VARIANT) and createrepo
+make image            # build Fedora 43 VM image (requires sudo)
+make check            # fast pre-push: shellcheck + TOML + actionlint + check-versions + check-settings
+make check-versions   # assert spec Version matches blueprint version (this variant)
+make check-versions-all  # check-versions across every variants/<name>
+make check-settings   # JSON-schema validate baked agent-settings.json (devbox only; skipped if absent)
+make check-size       # fail if image > baseline * (1 + SIZE_BUDGET_PCT/100)
+make bless-size       # promote current image size to variants/<variant>/tests/size.baseline
+make bless-boot-time  # FIRSTBOOT_SECS=<n> make bless-boot-time → variants/<variant>/tests/boot-time.baseline
+make shellcheck       # shellcheck this variant's SOURCES/*.sh + tests/*.sh
+make lint             # rpmlint on built RPM
+make validate         # check blueprint syntax, SSH key substitution, image-builder target
+make smoke            # boot VM (KVM) and run variant-specific smoke (variants/<variant>/tests/smoke.sh)
+make smoke-rerun      # re-run smoke against existing image (idempotency)
+make diff-packages    # blueprint-declared RPMs vs rpm -qa on a running VM
+make sign             # cosign keyless-sign $(OUTDIR)/SHA256SUMS
+make verify           # cosign verify SHA256SUMS (CERT_IDENTITY + CERT_OIDC_ISSUER)
+make sbom             # syft SBOM (CycloneDX + SPDX) from built image
+make attest           # cosign attest-blob SLSA v1 provenance for image
+make cve-scan         # grype scan SBOM with this variant's cve-allowlist.yaml
+make brew-drift       # OLD=… NEW=… diff two brew-versions.txt snapshots (devbox only)
+make baseline-record  # BUILD_SECS=… IMAGE_BYTES=… FIRSTBOOT_SECS=… SECONDBOOT_SECS=… → variants/<variant>/tests/baselines.csv
+make check-boot-time  # fail if latest firstboot_secs > median(last 5) * 1.2
+make clean            # rm rpmbuild/ + repo/$(VARIANT) + this variant's blueprint.effective.toml
+make distclean        # clean + rm output/$(VARIANT)
+make deps             # install createrepo_c (sudo)
+make bump-patch       # bump Z in X.Y.Z for $(VARIANT) — spec + blueprint lockstep
+make bump-minor       # bump Y, reset Z=0
+make bump-major       # bump X, reset Y=0, Z=0
+make install-hooks    # install pre-commit hooks
+make changelog        # git-cliff regenerate CHANGELOG.md from Conventional Commits
+make help             # list available targets
 ```
 
 ## Architecture
 
 ```
 fedbuild/
-  blueprint.toml                          # osbuild blueprint — packages, repos, customizations
-  Makefile                                # orchestration: rpm → repo → image chain
-  bastion-vm-firstboot/
-    SPECS/bastion-vm-firstboot.spec       # RPM spec
-    SOURCES/
-      firstboot.sh                        # runs on first boot as 'user', installs Homebrew + tools
-      bastion-vm-firstboot.service        # systemd oneshot, User=user, TimeoutStartSec=infinity
-      devbox-profile.sh → /etc/profile.d/devbox.sh   # GOPATH, PATH, Homebrew shellenv
-      user-sudoers → /etc/sudoers.d/user  # NOPASSWD: ALL (intentional, no external IP)
-      agent-claude.md → ~user/.claude/CLAUDE.md      # baked agent instructions (copied by firstboot)
-      agent-settings.json → ~user/.claude/settings.json  # baked agent settings
-      Brewfile → /usr/share/bastion-vm-firstboot/Brewfile  # brew formulae list (brew bundle)
-  tests/
-    smoke.sh                              # QEMU/KVM boot + SSH + tool-presence assertions
-    diff-packages.sh                      # blueprint vs rpm -qa drift report (used by `make diff-packages`)
-    size.baseline                         # image-size budget baseline (bytes, raw.zst)
+  Makefile                                  # VARIANT dispatch; all targets variant-scoped
+  variants/<name>/                          # one subdirectory per shipping artifact
+    variant.mk                              # PKG_NAME, PKG_BLUEPRINT_NAME, EXTRA_REPOS, PKG_IMAGE_FORMAT
+    blueprint.toml                          # osbuild blueprint
+    <pkg-name>-firstboot/
+      SPECS/<pkg-name>-firstboot.spec
+      SOURCES/                              # firstboot.sh + service unit + variant-specific assets
+    tests/
+      smoke.sh                              # variant-specific QEMU/KVM assertions
+      size.baseline                         # per-variant image-bytes ceiling
+      boot-time.baseline                    # per-variant firstboot-secs reference
+      baselines.csv                         # per-commit timing history
+      cve-allowlist.yaml                    # optional, falls back to repo-root default
+    extra-rpms/                             # optional: operator-supplied upstream RPMs
+      EXPECTED_SHA256                       # optional sha256sum manifest, verified pre-createrepo
+    README.md                               # what this variant produces, its inputs, its smoke
   keys/
-    authorized_key                        # SSH pubkey (gitignored) — required by `make image`
+    authorized_key                          # SSH pubkey (gitignored) — required by make image
   .github/workflows/
-    ci.yml                                # fedora:43 lint: shellcheck + rpmlint + actionlint + TOML
+    ci.yml                                  # fedora:43 matrix per variant
   schemas/
-    agent-settings.schema.json            # JSON Schema (2020-12) for baked ~/.claude/settings.json
-  .pre-commit-config.yaml                 # local hooks mirroring `make check`; install: make install-hooks
-  cliff.toml                              # git-cliff config for `make changelog`
-  repo/                                   # local yum repo (createrepo output), passed via --extra-repo
-  rpmbuild/                               # rpmbuild working tree
-  output/                                 # built VM images
+    agent-settings.schema.json              # JSON Schema for baked ~/.claude/settings.json
+  cliff.toml                                # git-cliff config for make changelog
+  repo/<variant>/                           # per-variant local yum repo (createrepo output)
+  rpmbuild/                                 # rpmbuild working tree (shared, isolated by package name)
+  output/<variant>/                         # per-variant built VM images
+  specs/active/                             # active work specs
 ```
+
+## Variant anatomy (extended)
+
+Each `variants/<name>/variant.mk` declares:
+- `PKG_NAME` — name of the firstboot RPM produced for this variant (must match the spec `Name:`)
+- `PKG_BLUEPRINT_NAME` — name field in the variant's `blueprint.toml`
+- `PKG_IMAGE_FORMAT` — image-builder output format (e.g. `minimal-raw-zst`)
+- `EXTRA_REPOS` — additional `--extra-repo <url>` flags passed to `image-builder`
+
+The root Makefile errors out if `variants/$(VARIANT)/variant.mk` is missing, so a typo in `VARIANT=` fails fast.
+
+`extra-rpms/` is the pickup point for upstream-built RPMs (e.g. `bastion-edge` produced by its own source repo's `yarn release:rpm`). Drop them in, optionally pin sha256s in `EXPECTED_SHA256`, then `make image`.
 
 ## Blueprint Format (non-obvious)
 

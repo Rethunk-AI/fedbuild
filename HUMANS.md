@@ -5,12 +5,24 @@
 ```bash
 make deps                                  # install createrepo_c (once)
 cp ~/.ssh/id_ed25519.pub keys/authorized_key   # place your SSH pubkey
-make                                       # build RPM + local yum repo (default)
+make                                       # build RPM + local yum repo (default = devbox variant)
 make image                                 # build Fedora 43 VM image (needs sudo)
 make smoke                                 # boot + assert firstboot (needs KVM)
 ```
 
-`make help` lists every target. Full reference + gotchas in **[AGENTS.md](AGENTS.md)**.
+`make help` lists every target. `make variants` lists known variants. Full reference + gotchas in **[AGENTS.md](AGENTS.md)**.
+
+## Multiple variants
+
+fedbuild builds multiple Fedora 43 image variants from one repo. The default `devbox` variant builds a Bastion Agent sandbox; other variants (e.g. `bastion-edge`) live as siblings under `variants/`. Pick one via `VARIANT=`:
+
+```bash
+make VARIANT=devbox            # default (omit VARIANT for the same effect)
+make VARIANT=bastion-edge image  # build the bastion-edge image (when defined)
+make variants                  # list all known variants
+```
+
+Per-variant state (blueprint, firstboot RPM, baselines, smoke assertions, optional `extra-rpms/` upstream pickup) lives under `variants/<name>/`. Per-variant build outputs land in `output/<name>/`. Adding a new variant: see [AGENTS.md § Variant anatomy](AGENTS.md#variant-anatomy-extended).
 
 ## What First Boot Installs
 

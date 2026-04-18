@@ -11,8 +11,15 @@ permissions:
 
 jobs:
   lint:
-    name: Lint & Validate
+    name: Lint & Validate (${{ matrix.variant }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [devbox]
+        # Add new variants to this list as they land. Keep ordering stable for
+        # deterministic CI run ordering.
+
     container:
       image: fedora:43
 
@@ -27,7 +34,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /var/cache/dnf
-          key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml', 'blueprint.toml', 'bastion-vm-firstboot/SPECS/*.spec') }}
+          key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml', 'variants/*/blueprint.toml', 'variants/*/*-firstboot/SPECS/*.spec') }}
           restore-keys: |
             dnf-f43-${{ steps.week.outputs.key }}-
             dnf-f43-
@@ -41,14 +48,14 @@ jobs:
       - name: Install check-jsonschema
         run: pip install --break-system-packages check-jsonschema
 
-      - name: Check (shellcheck + TOML + actionlint)
-        run: make check
+      - name: Check (shellcheck + TOML + actionlint + check-versions + check-settings)
+        run: make VARIANT=${{ matrix.variant }} check
 
       - name: Build RPM
-        run: make rpm
+        run: make VARIANT=${{ matrix.variant }} rpm
 
       - name: rpmlint
-        run: make lint
+        run: make VARIANT=${{ matrix.variant }} lint
 
       - name: systemd-analyze security (advisory)
         # Advisory-only: prints exposure score for the firstboot unit.
@@ -56,5 +63,21 @@ jobs:
         # --offline=true scores the file directly without loading it as a unit.
         continue-on-error: true
         run: |
-          systemd-analyze security --offline=true --no-pager \
-            bastion-vm-firstboot/SOURCES/bastion-vm-firstboot.service || true
+          unit=$(find variants/${{ matrix.variant }} -name '*.service' | head -1)
+          if [ -n "$unit" ]; then
+            systemd-analyze security --offline=true --no-pager "$unit" || true
+          else
+            echo "no .service unit found in variants/${{ matrix.variant }}"
+          fi
+
+  fleet-version-check:
+    name: Fleet check-versions-all
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install minimal deps
+        run: dnf install -y --setopt=install_weak_deps=False make yq
+      - name: check-versions-all
+        run: make check-versions-all
