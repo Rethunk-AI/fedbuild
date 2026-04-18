@@ -5,16 +5,18 @@ Companion to [`spec.md`](./spec.md) and [`plan.md`](./plan.md). Two phases: **A*
 ## Phase A — Structural refactor
 
 ### A1 — Baseline capture
+- [ ] Record pre-refactor SOURCE_DATE_EPOCH: `git log -1 --format=%ct -- bastion-vm-firstboot/SPECS/bastion-vm-firstboot.spec` → **1776424334** (captured 2026-04-17)
 - [ ] Run `make clean && make rpm` on current tree; record RPM SHA256 in operator scratch (not committed)
 - [ ] Record current git SHA for post-refactor comparison
 
 ### A2 — Move devbox files into `variants/devbox/`
+**Layout rule: everything variant-specific under `variants/<variant>/`. `tests/` root holds only generic helpers.**
 - [ ] `git mv blueprint.toml variants/devbox/blueprint.toml`
 - [ ] `git mv bastion-vm-firstboot/ variants/devbox/bastion-vm-firstboot/`
-- [ ] `git mv tests/size.baseline tests/devbox/size.baseline`
-- [ ] `git mv tests/boot-time.baseline tests/devbox/boot-time.baseline`
-- [ ] `git mv tests/baselines.csv tests/devbox/baselines.csv`
-- [ ] `git mv tests/cve-allowlist.yaml tests/devbox/cve-allowlist.yaml`
+- [ ] `git mv tests/size.baseline variants/devbox/tests/size.baseline`
+- [ ] `git mv tests/boot-time.baseline variants/devbox/tests/boot-time.baseline`
+- [ ] `git mv tests/baselines.csv variants/devbox/tests/baselines.csv`
+- [ ] `git mv tests/cve-allowlist.yaml variants/devbox/tests/cve-allowlist.yaml`
 - [ ] `git mv tests/smoke.sh variants/devbox/tests/smoke.sh`
 - [ ] Keep `tests/{smoke-rerun.sh,diff-packages.sh,brew-drift.sh}` at root (generic helpers)
 - [ ] Keep `schemas/` at root
@@ -23,9 +25,12 @@ Companion to [`spec.md`](./spec.md) and [`plan.md`](./plan.md). Two phases: **A*
 - [ ] Write `variants/devbox/variant.mk` with PKG_NAME, PKG_BLUEPRINT_NAME, PKG_IMAGE_FORMAT, EXTRA_REPOS
 
 ### A4 — Parameterize root Makefile
-- [ ] Add `VARIANT ?= devbox`, `VARIANT_DIR`, `VARIANT_TESTS` variables near top
+- [ ] Add `VARIANT ?= devbox`, `VARIANT_DIR := $(FEDBUILD)/variants/$(VARIANT)`, `VARIANT_TESTS := $(VARIANT_DIR)/tests`
 - [ ] `-include $(VARIANT_DIR)/variant.mk` after variable declarations
 - [ ] Re-point `REPODIR`, `OUTDIR`, `SPECFILE`, `SRCDIR`, `BLUEPRINT`, `BLUEPRINT_EFFECTIVE`, `SIZE_BASELINE`, `BOOT_TIME_BASELINE`, `BASELINES_CSV` to variant-scoped paths
+- [ ] Add `EXTRA_RPMS_DIR := $(VARIANT_DIR)/extra-rpms` + `EXTRA_RPMS_MANIFEST := $(EXTRA_RPMS_DIR)/EXPECTED_SHA256`
+- [ ] **rpm recipe: honour `SOURCE_DATE_EPOCH` env override** (F5a) — `sde=$${SOURCE_DATE_EPOCH:-$$(git log ...)}`
+- [ ] **repo target: sweep `$(EXTRA_RPMS_DIR)/*.rpm`** after placing the fedbuild-built RPM, verifying `$(EXTRA_RPMS_MANIFEST)` if present (F7 + F7a)
 - [ ] `image` target uses `$(EXTRA_REPOS)` from variant.mk instead of hardcoded flags
 - [ ] `smoke` target invokes `bash $(VARIANT_DIR)/tests/smoke.sh $(OUTDIR)`
 - [ ] `shellcheck` target globs `$(VARIANT_DIR)/**/*.sh` + `tests/*.sh`
@@ -47,9 +52,9 @@ Companion to [`spec.md`](./spec.md) and [`plan.md`](./plan.md). Two phases: **A*
 - [ ] `actionlint .github/workflows/ci.yml` green
 
 ### A8 — Byte-fidelity verify (HG-1)
-- [ ] Run `make clean && make VARIANT=devbox rpm`
+- [ ] Run `make clean && SOURCE_DATE_EPOCH=1776424334 make VARIANT=devbox rpm` (SDE pinned to pre-refactor content-commit ctime)
 - [ ] Diff RPM SHA256 vs A1 baseline — MUST match exactly
-- [ ] If mismatch: diagnose + fix before landing Phase A
+- [ ] If mismatch under pinned SDE: investigate `clamp_mtime_to_source_date_epoch`, stray edits, or SPEC content drift — block landing Phase A until identical
 
 ### Phase A commit
 - [ ] Single commit titled `refactor(variants): introduce variants/<name>/ layout`; body references this spec
@@ -59,9 +64,10 @@ Companion to [`spec.md`](./spec.md) and [`plan.md`](./plan.md). Two phases: **A*
 
 ### B1 — Skeleton
 - [ ] `mkdir -p variants/bastion-edge/{bastion-edge-firstboot/SPECS,bastion-edge-firstboot/SOURCES,tests,extra-rpms}`
-- [ ] `variants/bastion-edge/extra-rpms/.keep` + `variants/bastion-edge/.gitignore` excluding `*.rpm`
+- [ ] `variants/bastion-edge/extra-rpms/.keep` + `variants/bastion-edge/.gitignore` excluding `*.rpm` (RPMs are operator-supplied, not checked in)
+- [ ] `variants/bastion-edge/extra-rpms/EXPECTED_SHA256` — initially empty; populated by operator with the sha256 of the bastion-edge RPM they drop in (F7a)
 - [ ] `variants/bastion-edge/variant.mk`
-- [ ] `variants/bastion-edge/README.md`
+- [ ] `variants/bastion-edge/README.md` documents: how to produce the bastion-edge RPM (`yarn release:rpm` in the bastion-edge source repo), how to drop it + its sha256 into `extra-rpms/`, that the caller is responsible for the RPM's original provenance (cosign/signature check before accepting into fedbuild's supply chain)
 
 ### B2 — Blueprint
 - [ ] Write `variants/bastion-edge/blueprint.toml` — Fedora 43 minimal + bastion-edge runtime deps

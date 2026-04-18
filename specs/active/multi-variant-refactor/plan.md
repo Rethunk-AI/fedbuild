@@ -52,16 +52,18 @@ blueprint.effective.toml                      (kept at root — derived artifact
 bastion-vm-firstboot/                         → variants/devbox/bastion-vm-firstboot/
   SPECS/bastion-vm-firstboot.spec
   SOURCES/  (all files)
-tests/size.baseline                           → tests/devbox/size.baseline
-tests/boot-time.baseline                      → tests/devbox/boot-time.baseline
-tests/baselines.csv                           → tests/devbox/baselines.csv
-tests/smoke.sh                                → variants/devbox/tests/smoke.sh  (variant-specific assertions)
-tests/smoke-rerun.sh                          (kept at tests/ — generic helper)
+tests/size.baseline                           → variants/devbox/tests/size.baseline
+tests/boot-time.baseline                      → variants/devbox/tests/boot-time.baseline
+tests/baselines.csv                           → variants/devbox/tests/baselines.csv
+tests/smoke.sh                                → variants/devbox/tests/smoke.sh
+tests/cve-allowlist.yaml                      → variants/devbox/tests/cve-allowlist.yaml
+tests/smoke-rerun.sh                          (kept at tests/ — generic helper, takes OUTDIR arg)
 tests/diff-packages.sh                        (kept at tests/ — generic helper)
-tests/brew-drift.sh                           (kept at tests/ — devbox-only but generic in shape; consider moving to variants/devbox/tests/ in a follow-up if no other variant uses it)
-tests/cve-allowlist.yaml                      → tests/devbox/cve-allowlist.yaml  (per-variant allowlists)
-schemas/agent-settings.schema.json            (kept at schemas/ — devbox-specific but consumers may reference)
+tests/brew-drift.sh                           (kept at tests/ — generic shape; devbox-only in practice)
+schemas/agent-settings.schema.json            (kept at schemas/ — reusable schema pattern)
 ```
+
+**Layout rule:** everything variant-specific lives under `variants/<variant>/`. Nothing variant-specific lives under `tests/` at the repo root. `tests/` at root holds only generic helpers that take a variant as input argument.
 
 Notes:
 - `brew-drift.sh` stays at top-level for Phase A; if bastion-edge doesn't use brew (it won't), we can scope it to `variants/devbox/tests/` in a follow-up.
@@ -96,22 +98,51 @@ Top of Makefile gains:
 ```makefile
 VARIANT          ?= devbox
 VARIANT_DIR      := $(FEDBUILD)/variants/$(VARIANT)
-VARIANT_TESTS    := $(FEDBUILD)/tests/$(VARIANT)
+VARIANT_TESTS    := $(VARIANT_DIR)/tests
 
 # Pull variant-specific vars
 -include $(VARIANT_DIR)/variant.mk
 
-# Derived paths (now variant-scoped)
+# Derived paths (all variant-scoped; no legacy root-level per-variant state)
 REPODIR    := $(FEDBUILD)/repo/$(VARIANT)
 OUTDIR     := $(FEDBUILD)/output/$(VARIANT)
 SPECFILE   := $(VARIANT_DIR)/$(PKG_NAME)/SPECS/$(PKG_NAME).spec
 SRCDIR     := $(VARIANT_DIR)/$(PKG_NAME)/SOURCES
 BLUEPRINT  := $(VARIANT_DIR)/blueprint.toml
 BLUEPRINT_EFFECTIVE := $(VARIANT_DIR)/blueprint.effective.toml
-SIZE_FILE          := $(OUTDIR)/SIZE
-SIZE_BASELINE      := $(VARIANT_TESTS)/size.baseline
-BOOT_TIME_BASELINE := $(VARIANT_TESTS)/boot-time.baseline
-BASELINES_CSV      := $(VARIANT_TESTS)/baselines.csv
+EXTRA_RPMS_DIR      := $(VARIANT_DIR)/extra-rpms
+EXTRA_RPMS_MANIFEST := $(EXTRA_RPMS_DIR)/EXPECTED_SHA256
+SIZE_FILE           := $(OUTDIR)/SIZE
+SIZE_BASELINE       := $(VARIANT_TESTS)/size.baseline
+BOOT_TIME_BASELINE  := $(VARIANT_TESTS)/boot-time.baseline
+BASELINES_CSV       := $(VARIANT_TESTS)/baselines.csv
+```
+
+**rpm recipe: honour `SOURCE_DATE_EPOCH` env override (F5a)** — replace the `@sde=$$(git log -1 ...)` shell line with:
+```makefile
+@sde=$${SOURCE_DATE_EPOCH:-$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null || date +%s)}; \
+ sha=$$(git rev-parse HEAD 2>/dev/null || echo unknown); \
+ ...
+```
+This both (a) lets A8 verify byte-fidelity by pinning the pre-refactor SDE and (b) enables CI runners + external reproducers to pin an explicit epoch.
+
+**`repo` target: sweep `extra-rpms/` (F7)** — extend the recipe:
+```makefile
+$(REPO_MARKER): $(RPM)
+	@command -v createrepo >/dev/null 2>&1 || { echo "createrepo_c not found — run: make deps"; exit 1; }
+	rm -rf $(REPODIR)
+	mkdir -p $(REPODIR)
+	cp -v $(RPM) $(REPODIR)/
+	@if [ -d $(EXTRA_RPMS_DIR) ]; then \
+	   if [ -f $(EXTRA_RPMS_MANIFEST) ]; then \
+	     echo "Verifying extra-rpms against $(EXTRA_RPMS_MANIFEST)..."; \
+	     (cd $(EXTRA_RPMS_DIR) && sha256sum -c EXPECTED_SHA256) || { echo "ERROR: extra-rpms checksum mismatch"; exit 1; }; \
+	   else \
+	     echo "NOTE: $(EXTRA_RPMS_DIR) present but no EXPECTED_SHA256 manifest — supply-chain gap, see variant README"; \
+	   fi; \
+	   find $(EXTRA_RPMS_DIR) -maxdepth 1 -name '*.rpm' -exec cp -v {} $(REPODIR)/ \; ; \
+	 fi
+	createrepo $(REPODIR)
 ```
 
 The `image` target's `--extra-repo` flags become `$(EXTRA_REPOS)` from variant.mk. All other targets (`check`, `lint`, `sign`, `verify`, `sbom`, `attest`, `cve-scan`) remain variant-agnostic in structure — they just operate on `$(OUTDIR)` which is now variant-scoped.
@@ -162,14 +193,19 @@ jobs:
 
 ### A8 — Verify byte-fidelity (HG-1)
 
+A `git mv` advances the SPEC path's last-touching-commit ctime (the rename commit), so the default Makefile SDE source drifts. The A1 baseline was captured at pre-refactor SDE `1776424334`. Pin that epoch explicitly post-refactor:
+
 ```bash
-make clean && make VARIANT=devbox rpm
-sha256sum rpmbuild/RPMS/noarch/bastion-vm-firstboot-*.rpm > /tmp/devbox-rpm.sha256.post
-diff /tmp/devbox-rpm.sha256.pre /tmp/devbox-rpm.sha256.post
-# MUST produce identical output (paths will differ; compare hash field only)
+make clean
+SOURCE_DATE_EPOCH=1776424334 make VARIANT=devbox rpm
+sha256sum rpmbuild/RPMS/noarch/bastion-vm-firstboot-*.rpm > /var/tmp/devbox-rpm.sha256.post
+diff <(awk '{print $1}' /var/tmp/devbox-rpm.sha256.pre) <(awk '{print $1}' /var/tmp/devbox-rpm.sha256.post)
+# MUST produce zero diff output
 ```
 
-If hashes diverge, investigate — likely a SOURCE_DATE_EPOCH drift, a mtime leak from `git mv`, or a SPEC-file path change affecting `_sourcedir`. Phase A MUST NOT land with non-byte-identical output.
+If hashes diverge even with the pinned SDE, investigate — likely a mtime leak from `git mv` (`clamp_mtime_to_source_date_epoch 1` should catch it) or a SPEC-file content drift from a stray edit during the refactor. Phase A MUST NOT land with non-byte-identical output under pinned SDE.
+
+**Why not unconditionally pin SDE in the Makefile?** Default SDE derivation from `git log` remains correct for forward-dated, non-renamed state. The pin is an escape hatch (F5a) used by A8 and by external reproducers; the default path stays ergonomic.
 
 ---
 
