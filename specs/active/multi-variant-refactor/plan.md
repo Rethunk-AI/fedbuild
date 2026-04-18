@@ -232,61 +232,75 @@ variants/bastion-edge/
 
 ### B2 — `blueprint.toml`
 
-Fedora 43 minimal + bastion-edge runtime deps. No Homebrew, no dev tools, no nodejs for the OS (bastion-edge embeds its Node runtime in the RPM if needed; this is a runtime choice of the bastion-edge maintainers — validate against their actual `.spec` Requires: list).
+Fedora 43 minimal + bastion-edge runtime deps. No Homebrew, no dev tools. Nodejs is required because `bastion-theatre` + `bastion-theatre-manager` both `Requires: nodejs >= 22` (Fedora 43 default satisfies this).
+
+**Naming correction (2026-04-17):** The `bastion-edge` source repo does not ship a single `bastion-edge` RPM. It ships two version-matched RPMs from `packaging/rpm/`:
+- `bastion-theatre` — Node payload, no systemd unit
+- `bastion-theatre-manager` — the daemon; ships `bastion-theatre-manager.service`; `Requires: bastion-theatre = %{version}-%{release}`
+
+fedbuild's variant slot is still named `bastion-edge` (the Bastion tier-3+4 concept per `bastion-edge/CLAUDE.md`, stable regardless of RPM naming), but blueprint/services/smoke reference the real RPM + service names.
 
 ```toml
 name = "fedora-43-bastion-edge"
-description = "Fedora 43 minimal + bastion-edge service"
+description = "Fedora 43 minimal + Bastion TheatreManager (field-deployable edge image)"
 version = "0.1.0"
 distro = "fedora-43"
 
 packages = [
     # --- minimal runtime ---
     { name = "systemd",                 version = "*" },
-    { name = "glibc-minimal-langpack",  version = "*" },
     { name = "openssh-server",          version = "*" },
     { name = "sudo",                    version = "*" },
     { name = "ca-certificates",         version = "*" },
+    { name = "glibc-minimal-langpack",  version = "*" },
+    { name = "cloud-init",              version = "*" },   # cidata -> edge-id
+    { name = "audit",                   version = "*" },
+    { name = "dnf5-plugin-automatic",   version = "*" },
 
-    # --- bastion-edge runtime deps (audit against actual Requires:) ---
-    { name = "bastion-edge",            version = "*" },   # from extra-rpms/
-    # ... add deps declared by the bastion-edge RPM that aren't already pulled transitively
+    # --- bastion-theatre-manager.spec Requires: ---
+    { name = "nodejs",                  version = "*" },   # >= 22 (F43 default)
+    { name = "openssl",                 version = "*" },
+
+    # --- operator-supplied via extra-rpms/ ---
+    { name = "bastion-theatre",         version = "*" },
+    { name = "bastion-theatre-manager", version = "*" },
+
+    # --- built by this variant ---
+    { name = "bastion-edge-firstboot",  version = "*" },
 ]
 
 [[customizations.user]]
 name = "edge-operator"
-groups = ["wheel"]
-password = "!"   # locked; SSH key required
 key = "ssh-ed25519 CHANGEME user@localhost"
+groups = ["wheel"]
 
 [customizations.services]
-enabled = ["sshd", "bastion-edge", "bastion-edge-firstboot"]
-
-[customizations.kernel]
-# no special args
+enabled = ["sshd", "bastion-theatre-manager", "bastion-edge-firstboot", "dnf5-automatic.timer", "auditd.service"]
 ```
 
-The `{ name = "bastion-edge", version = "*" }` pulls from the local yum repo built by `make VARIANT=bastion-edge repo` (which includes `extra-rpms/*.rpm` in addition to the fedbuild-built firstboot RPM).
+Both `bastion-theatre*` RPMs come from the local yum repo built by `make VARIANT=bastion-edge repo` (which folds in `extra-rpms/*.rpm` alongside the fedbuild-built firstboot RPM). The `theatremanager` sysuser is auto-created by the `bastion-theatre-manager` RPM's `%post`; firstboot does not need to handle it.
 
 ### B3 — Firstboot RPM
 
-`bastion-edge-firstboot.spec` is a minimal post-install unit:
-- Enables `bastion-edge.service`
-- Reads `/var/lib/cloud/data/meta-data` (cidata) for `edge-id`; writes to `/var/lib/bastion-edge/edge-id`
-- Runs oneshot; disables itself after success
+`bastion-edge-firstboot.spec` is a minimal post-install unit. It does NOT manage `bastion-theatre-manager.service` — that unit's lifecycle is owned by the upstream `bastion-theatre-manager` RPM (systemd-preset/enabled via blueprint `services.enabled`). firstboot's only job is stamping an `edge-id`:
+
+- Reads cidata if present (`/var/lib/cloud/data/instance-id`, `…/nocloud/meta-data`, `…/meta-data`); falls back to `/etc/machine-id`
+- Writes `/var/lib/bastion-edge/edge-id` (0644, root-owned)
+- Runs oneshot; `ExecStartPost` touches `/var/lib/bastion-edge/done`
 
 `bastion-edge-firstboot.service`:
 ```ini
 [Unit]
-Description=bastion-edge first-boot setup
-ConditionPathExists=!/var/lib/bastion-edge/.firstboot-done
-After=cloud-init.target bastion-edge.service
+Description=Bastion edge VM first-boot setup (edge-id stamp)
+After=cloud-init.target bastion-theatre-manager.service
+Wants=cloud-init.target
 Before=multi-user.target
+ConditionPathExists=!/var/lib/bastion-edge/done
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/bastion-edge-firstboot/firstboot.sh
-ExecStartPost=/bin/touch /var/lib/bastion-edge/.firstboot-done
+ExecStartPost=/usr/bin/touch /var/lib/bastion-edge/done
 RemainAfterExit=yes
 
 [Install]
@@ -296,14 +310,16 @@ WantedBy=multi-user.target
 ### B4 — smoke.sh
 
 Variant-specific assertions (`variants/bastion-edge/tests/smoke.sh`):
-- Boot VM via qemu-kvm
-- Wait for SSH (cloud-init SSH key substituted at image-build time)
-- `systemctl is-active bastion-edge` → `active`
-- `systemctl is-active bastion-edge-firstboot` → `inactive` (oneshot completed)
-- `test -f /var/lib/bastion-edge/.firstboot-done`
+- Boot VM via qemu-kvm; SSH as `edge-operator` on port 2232 (distinct from devbox's 2222 so both can run concurrently)
+- Wait for `FEDBUILD_READY` on serial (same marker protocol as devbox)
+- `systemctl is-active bastion-theatre-manager` → `active`
+- `systemctl is-active bastion-edge-firstboot` → `active` (RemainAfterExit=yes; becomes `inactive` after reboot)
+- `test -f /var/lib/bastion-edge/done` — sentinel written by `ExecStartPost`
 - `test -f /var/lib/bastion-edge/edge-id` — non-empty
-- No Homebrew (`test ! -d /home/linuxbrew`), no Claude (`test ! -f ~/.claude/settings.json`)
-- Reboot; re-assert `systemctl is-active bastion-edge` stays `active` on second boot
+- No Homebrew (`test ! -d /home/linuxbrew`), no agent config (`test ! -d /home/edge-operator/.claude`)
+- `command -v node` succeeds (TheatreManager requires it)
+- SELinux enforcing; zero AVC denials since boot
+- Reboot; re-assert `bastion-theatre-manager` stays `active`, firstboot does not re-run (sentinel mtime unchanged)
 
 Model the script on `variants/devbox/tests/smoke.sh` (copied+adapted — OK to diverge).
 
@@ -311,9 +327,15 @@ Model the script on `variants/devbox/tests/smoke.sh` (copied+adapted — OK to d
 
 Operator flow before `make VARIANT=bastion-edge image`:
 ```bash
-# In the bastion-edge source repo:
-yarn release:rpm
-cp packaging/rpm/dist/bastion-edge-*.rpm ~/fedbuild/variants/bastion-edge/extra-rpms/
+# In the bastion-edge source repo — two RPMs, version-matched:
+yarn release:rpm:theatre
+yarn release:rpm:theatre-manager
+cp packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre{,-manager}-*.rpm \
+   ~/fedbuild/variants/bastion-edge/extra-rpms/
+
+# Pin what was accepted into the supply chain (F7a):
+cd ~/fedbuild/variants/bastion-edge/extra-rpms
+sha256sum bastion-theatre*.rpm bastion-theatre-manager*.rpm > EXPECTED_SHA256
 
 # In fedbuild:
 make VARIANT=bastion-edge image
