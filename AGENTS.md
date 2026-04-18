@@ -9,7 +9,7 @@ Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox wi
 ```bash
 make variants               # list known variants with one-line description
 make                        # default: VARIANT=devbox
-make VARIANT=bastion-edge   # build the bastion-edge variant (when defined)
+make VARIANT=bastion-edge   # build the bastion-edge variant (Fedora 43 minimal + bastion-theatre-manager)
 ```
 
 Every variant gets the same pipeline for free: reproducible RPM (SOURCE_DATE_EPOCH), createrepo with optional `extra-rpms/` pickup, image-builder, cosign-signed SHA256SUMS, syft SBOM, SLSA v1 provenance, size budget, smoke test.
@@ -98,7 +98,7 @@ Each `variants/<name>/variant.mk` declares:
 
 The root Makefile errors out if `variants/$(VARIANT)/variant.mk` is missing, so a typo in `VARIANT=` fails fast.
 
-`extra-rpms/` is the pickup point for upstream-built RPMs (e.g. `bastion-edge` produced by its own source repo's `yarn release:rpm`). Drop them in, optionally pin sha256s in `EXPECTED_SHA256`, then `make image`.
+`extra-rpms/` is the pickup point for upstream-built RPMs. Example: the `bastion-edge` variant consumes two version-matched RPMs from the [bastion-edge source repo](https://github.com/Rethunk-Tech/bastion-edge) — `bastion-theatre` (Node payload) + `bastion-theatre-manager` (daemon) — produced via `yarn release:rpm:theatre` + `yarn release:rpm:theatre-manager`. Drop them in, optionally pin sha256s in `EXPECTED_SHA256`, then `make image`.
 
 ## Blueprint Format (non-obvious)
 

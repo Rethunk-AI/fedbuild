@@ -7,7 +7,7 @@ Reproducible Fedora 43 VM image builder. One pipeline; multiple variants for dis
 | Variant | Purpose | Built by |
 |---------|---------|----------|
 | `devbox` | Bastion Agent (Claude Code, Gemini CLI) sandbox — Homebrew + dev toolchain | `make` (default) |
-| `bastion-edge` | Field-deployable image with `bastion-edge` service pre-enabled | `make VARIANT=bastion-edge image` *(coming in Phase B)* |
+| `bastion-edge` | Field-deployable image with `bastion-theatre-manager` daemon pre-enabled (Fedora 43 minimal, no Homebrew, no dev tools) | `make VARIANT=bastion-edge image` |
 
 Each variant produces:
 - A small **firstboot RPM** (systemd oneshot for first-boot bootstrap)
