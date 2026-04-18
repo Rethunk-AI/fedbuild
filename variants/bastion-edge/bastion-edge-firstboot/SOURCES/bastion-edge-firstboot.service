@@ -1,0 +1,39 @@
+[Unit]
+Description=Bastion edge VM first-boot setup (edge-id stamp)
+After=cloud-init.target bastion-theatre-manager.service
+Wants=cloud-init.target
+Before=multi-user.target
+ConditionPathExists=!/var/lib/bastion-edge/done
+
+[Service]
+Type=oneshot
+TimeoutStartSec=120
+User=root
+ExecStartPre=+/usr/bin/install -d -m 0755 /var/lib/bastion-edge
+ExecStart=/usr/libexec/bastion-edge-firstboot/firstboot.sh
+ExecStartPost=/usr/bin/touch /var/lib/bastion-edge/done
+StandardOutput=journal+console
+StandardError=journal+console
+RemainAfterExit=yes
+
+# Hardening — tighter than devbox because this unit does much less. No sudo,
+# no Homebrew Ruby, no npm install. Mostly reads cidata + writes one file.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+# Writable paths the script touches.
+ReadWritePaths=/var/lib/bastion-edge
+
+[Install]
+WantedBy=multi-user.target

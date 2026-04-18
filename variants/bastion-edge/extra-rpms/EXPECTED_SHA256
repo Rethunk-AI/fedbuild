@@ -1,0 +1,11 @@
+# Operator populates this file after dropping bastion-theatre*.rpm into this
+# directory. Format: `<sha256>  <filename>` — one pair per line, two-space
+# separator (standard `sha256sum` output). Example:
+#
+#     7a3f...c12e  bastion-theatre-0.0.0-1.fc43.x86_64.rpm
+#     e88b...9034  bastion-theatre-manager-0.0.0-1.fc43.x86_64.rpm
+#
+# `make VARIANT=bastion-edge repo` runs `sha256sum -c EXPECTED_SHA256` before
+# `createrepo` and aborts on any mismatch. If this file is empty or blank
+# (comments-only like this default), the Makefile emits a WARN and continues
+# — the sha check is opt-in per the variant README's supply-chain section.

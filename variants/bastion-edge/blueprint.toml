@@ -1,0 +1,89 @@
+name = "fedora-43-bastion-edge"
+description = "Fedora 43 minimal + Bastion TheatreManager (field-deployable edge image)"
+version = "0.1.0"
+distro = "fedora-43"
+
+# Bastion edge VM: Fedora 43 minimal runtime that boots straight into the
+# TheatreManager daemon (gRPC to Bastion) plus the Theatre payload it spawns.
+# The two bastion-* packages below come from operator-supplied RPMs dropped
+# into variants/bastion-edge/extra-rpms/ (see README); bastion-edge-firstboot
+# is built by fedbuild itself from this variant's .spec.
+packages = [
+    # --- minimal runtime ---
+    { name = "systemd",                version = "*" },
+    { name = "openssh-server",         version = "*" },
+    { name = "sudo",                   version = "*" },
+    { name = "ca-certificates",        version = "*" },
+    { name = "glibc-minimal-langpack", version = "*" },
+    # cloud-init: firstboot reads /var/lib/cloud/data/meta-data for edge-id
+    # when the image is booted with a NoCloud datasource (cidata CD).
+    { name = "cloud-init",             version = "*" },
+    # audit: AVC denial visibility (smoke asserts no denials since boot)
+    { name = "audit",                  version = "*" },
+    # dnf5-automatic: security-only updates (mirrors devbox hardening posture)
+    { name = "dnf5-plugin-automatic",  version = "*" },
+
+    # --- bastion-theatre-manager runtime dependencies ---
+    # bastion-theatre-manager.spec Requires: nodejs >= 22, openssl, systemd,
+    # bastion-theatre = %{version}-%{release}. Fedora 43 ships nodejs 22 as
+    # default; leaving unpinned so dnf picks latest — if F43 drifts off 22
+    # we'd switch to the versioned module name here.
+    { name = "nodejs",                 version = "*" },
+    { name = "openssl",                version = "*" },
+
+    # --- Bastion edge packages (operator-supplied via extra-rpms/) ---
+    { name = "bastion-theatre",         version = "*" },
+    { name = "bastion-theatre-manager", version = "*" },
+
+    # --- firstboot (built by this variant) ---
+    { name = "bastion-edge-firstboot",  version = "*" },
+]
+
+[customizations]
+hostname = "bastion-edge"
+
+[[customizations.user]]
+name = "edge-operator"
+key = "ssh-ed25519 CHANGEME user@localhost"
+groups = ["wheel"]
+
+[customizations.services]
+enabled = [
+    "sshd",
+    "bastion-theatre-manager",
+    "bastion-edge-firstboot",
+    "dnf5-automatic.timer",
+    "auditd.service",
+]
+# initial-setup blocks headless boot waiting for input; user is pre-created
+# above, so the TUI is noise.
+disabled = ["initial-setup"]
+
+[customizations.locale]
+languages = ["en_US.UTF-8"]
+keyboard = "us"
+
+[customizations.timezone]
+timezone = "UTC"
+
+[customizations.kernel]
+append = "console=ttyS0,115200 console=tty0"
+
+# Single root partition — no LVM, no split mounts. Edge is a small
+# field-deployable appliance, not a development workstation.
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = 10737418240    # 10 GiB
+
+# Harden SSHD: key-only auth, no root login, no X11.
+[[customizations.files]]
+path = "/etc/ssh/sshd_config.d/99-hardening.conf"
+mode = "0644"
+data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers edge-operator\n"
+
+# dnf5-automatic: security-only updates, apply immediately, no reboot.
+# Same posture as devbox — see variants/devbox/blueprint.toml for rationale.
+[[customizations.files]]
+path = "/etc/dnf/dnf5-plugins/automatic.conf"
+mode = "0644"
+data = "[commands]\nupgrade_type = security\ndownload_updates = yes\napply_updates = yes\nrandom_sleep = 900\n\n[emitters]\nemit_via = stdio\n"
