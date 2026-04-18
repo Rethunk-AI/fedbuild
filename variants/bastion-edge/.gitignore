@@ -1,0 +1,5 @@
+# Operator-supplied upstream RPMs are not checked in; only EXPECTED_SHA256
+# pins what's accepted. Place upstream-built bastion-edge*.rpm in extra-rpms/
+# manually before running `make VARIANT=bastion-edge image`.
+extra-rpms/*.rpm
+blueprint.effective.toml

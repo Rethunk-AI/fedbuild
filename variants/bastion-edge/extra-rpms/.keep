@@ -1,0 +1,7 @@
+# Drop operator-supplied upstream RPMs (e.g. bastion-edge-*.rpm produced by
+# `yarn release:rpm` in the bastion-edge source repo) here before running
+# `make VARIANT=bastion-edge image`.
+#
+# Pin accepted sha256 in EXPECTED_SHA256 (sha256sum format, one line per RPM).
+# `make repo` verifies each RPM against this manifest before createrepo and
+# fails on mismatch.
