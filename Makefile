@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image smoke clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
+.PHONY: all deps rpm repo image publish-mirror smoke clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
 
 # ── Variant dispatch ──────────────────────────────────────────────────────────
 # `make` (no arg) defaults to the devbox variant. Override with VARIANT=<name>.
@@ -108,6 +108,9 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 	sed "s|ssh-ed25519 CHANGEME user@localhost|$$(cat $(KEYFILE))|" $(BLUEPRINT) > $(BLUEPRINT_EFFECTIVE)
 
 ## image: build the variant's VM image (requires sudo)
+## Produces both raw.zst (field-deploy; dd to media) and qcow2 (ADCON runtime;
+## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
+## convert so both formats descend from one reproducible image-builder output.
 image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	mkdir -p $(OUTDIR)
 	sudo image-builder build              \
@@ -118,14 +121,26 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
 	cp -v $(RPM) $(OUTDIR)/
-	cd $(OUTDIR) && sha256sum $$(find . -name '*.raw.zst' -printf '%P\n') > SHA256SUMS
+	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
+	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
+	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
+	 test -n "$$img" || { echo "ERROR: no *.raw.zst in $(OUTDIR) — image-builder output missing"; exit 1; }; \
+	 qcow=$$(echo "$$img" | sed 's/\.raw\.zst$$/.qcow2/'); \
+	 tmpraw=$$(mktemp --tmpdir=$(OUTDIR) raw-XXXXXX.raw); \
+	 echo "Decompressing $$(basename "$$img") → $$(basename "$$tmpraw")"; \
+	 zstd -df --quiet "$$img" -o "$$tmpraw"; \
+	 echo "Converting   $$(basename "$$tmpraw") → $$(basename "$$qcow") (qcow2, sparse)"; \
+	 qemu-img convert -f raw -O qcow2 "$$tmpraw" "$$qcow"; \
+	 rm -f "$$tmpraw"; \
+	 echo "Wrote $$qcow ($$(stat -c%s "$$qcow") bytes)"
+	cd $(OUTDIR) && sha256sum $$(find . -maxdepth 1 \( -name '*.raw.zst' -o -name '*.qcow2' \) -printf '%P\n') > SHA256SUMS
 	@cd $(OUTDIR) && for f in $$(basename $(RPM)) sbom.cdx.json sbom.spdx.json provenance.json; do \
 	     [ -f "$$f" ] && sha256sum "$$f" >> SHA256SUMS && echo "  + $$f"; \
 	 done; true
 	@echo "Wrote $(OUTDIR)/SHA256SUMS"
 	@img=$$(find $(OUTDIR) -name '*.raw.zst' | sort | tail -1); \
 	 stat -c%s "$$img" > $(SIZE_FILE); \
-	 echo "Wrote $(SIZE_FILE) ($$(cat $(SIZE_FILE)) bytes)"
+	 echo "Wrote $(SIZE_FILE) ($$(cat $(SIZE_FILE)) bytes — raw.zst basis)"
 	@$(MAKE) --no-print-directory check-size
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
@@ -343,6 +358,26 @@ check-boot-time:
 	         printf "ERROR: firstboot_secs %s exceeds median*1.2 (%.1f)\n", latest, limit; exit 1; \
 	     } else { print "OK: within budget"; } \
 	 }' $(BASELINES_CSV)
+
+## publish-mirror: stage built qcow2 + sha256 + SBOM + provenance into the ADCON
+## authoritative-mirror layout. Target directory tree matches the route parser
+## in bastion-core/apps/server/src/adcon/deployment/adcon-mirror-routes.ts:
+##   $(MIRROR_DIR)/vm-images/$(VARIANT)/$(PKG_VERSION)/<filename>
+## MIRROR_DIR defaults to $(OUTDIR)/mirror-stage for local smoke; operators set
+## MIRROR_DIR=/var/lib/bastion/adcon-mirror for production publish.
+MIRROR_DIR ?= $(OUTDIR)/mirror-stage
+publish-mirror:
+	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image"; exit 1; }
+	@qcow=$$(find $(OUTDIR) -maxdepth 1 -name '*.qcow2' | sort | tail -1); \
+	 test -n "$$qcow" || { echo "ERROR: no *.qcow2 in $(OUTDIR) — run: make image"; exit 1; }; \
+	 dst=$(MIRROR_DIR)/vm-images/$(VARIANT)/$(PKG_VERSION); \
+	 mkdir -p "$$dst"; \
+	 cp -v "$$qcow" "$$dst/"; \
+	 (cd $(OUTDIR) && grep " $$(basename $$qcow)$$" SHA256SUMS) > "$$dst/$$(basename $$qcow).sha256"; \
+	 for f in sbom.cdx.json sbom.spdx.json provenance.json provenance.sig provenance.pem SHA256SUMS SHA256SUMS.sig SHA256SUMS.pem; do \
+	   [ -f $(OUTDIR)/$$f ] && cp -v $(OUTDIR)/$$f "$$dst/" || true; \
+	 done; \
+	 echo "Published $(VARIANT) $(PKG_VERSION) → $$dst"
 
 ## clean: remove rpmbuild tree, this variant's local repo, and effective blueprint
 clean:
