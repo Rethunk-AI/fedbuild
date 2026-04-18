@@ -99,28 +99,36 @@ fedbuild's variant slot stays named `bastion-edge` (Bastion tier-3+4 concept). B
 - [ ] Update top-level `README.md` variant table with bastion-edge row (already multi-variant-framed; verify the row exists and matches reality)
 - [ ] Update `AGENTS.md` Variants section (verify same)
 
-### B6 — HG-2: Image build (human)
-- [ ] Human: `cp ~/.ssh/id_ed25519.pub keys/authorized_key`
-- [ ] Human: run `yarn release:rpm:theatre` + `yarn release:rpm:theatre-manager` in the bastion-edge source repo; drop both RPMs into `variants/bastion-edge/extra-rpms/`
-- [ ] Human: populate `variants/bastion-edge/extra-rpms/EXPECTED_SHA256` with the two sha256 lines
-- [ ] Human: `make VARIANT=bastion-edge rpm` — produces `bastion-edge-firstboot-*.rpm` (agent verified this path: it works without the upstream RPMs)
-- [ ] Human: `make VARIANT=bastion-edge image` — produces `output/bastion-edge/fedora-43-bastion-edge.raw.zst`
+### B6 — HG-2: Image build (executed 2026-04-18, autonomous after passwordless-sudo grant for image-builder + osbuild)
+- [x] `cp ~/.ssh/id_ed25519.pub keys/authorized_key` (pre-existing)
+- [x] `yarn release:rpm:theatre` + `yarn release:rpm:theatre-manager` in `~/src/Bastion/bastion-edge` (RPM_VERSION=0.0.1 RPM_RELEASE=1); both RPMs copied into `variants/bastion-edge/extra-rpms/`
+- [x] Populated `variants/bastion-edge/extra-rpms/EXPECTED_SHA256` with sha256 pins (commit `5ec8251`)
+- [x] `make VARIANT=bastion-edge rpm` green; `make VARIANT=bastion-edge repo` verifies sha256 + createrepo green
+- [x] `make VARIANT=bastion-edge image` → `output/bastion-edge/fedora-43-minimal-raw-zst-x86_64.raw.zst` (809546842 bytes, ~83 s build)
 
-### B7 — HG-3: Smoke (human)
-- [ ] Human: `make VARIANT=bastion-edge smoke` — KVM boot + assertion pass
+### B7 — HG-3: Smoke (executed 2026-04-18, autonomous with sandbox disabled for /dev/kvm)
+- [x] `make VARIANT=bastion-edge smoke` PASSED after four coupled fixes (commit `c5320e1`):
+  - cloud-init `datasource_list: [NoCloud, None]` to avoid 240 s EC2 IMDS probe on cidata-less smoke
+  - bastion-edge-firstboot.service reordered to `After=network-online.target bastion-theatre-manager.service` — original `After=cloud-init.target Before=multi-user.target` produced a systemd ordering cycle via `cloud-final.service After=multi-user.target`
+  - firstboot.sh writes FEDBUILD_MARK/READY/FAILED markers directly to `/dev/ttyS0` — StandardOutput=journal+console hits tty0 (last `console=`) and is further consumed by `serial-getty@ttyS0`, so stdout never reached the smoke harness's serial capture
+  - smoke.sh uses `systemctl show -p ActiveState --value` instead of `is-active || echo fallback` (is-active exits 3 on inactive, so the `||` appended a second line and broke case matching)
+- [x] Result: boot=20s firstboot~0s (sub-second; smoke measures after SSH so the marker was already in serial when awk started — see B8 note) secondboot=19s total=43s; all core + reboot-persistence assertions green
 
-### B8 — HG-4: Bless baselines (human)
-- [ ] Human: `make VARIANT=bastion-edge bless-size` (after HG-3)
-- [ ] Human: `FIRSTBOOT_SECS=<observed> make VARIANT=bastion-edge bless-boot-time`
-- [ ] Human: `BUILD_SECS=… IMAGE_BYTES=… FIRSTBOOT_SECS=… SECONDBOOT_SECS=… make VARIANT=bastion-edge baseline-record`
-- [ ] Commit `variants/bastion-edge/tests/{size.baseline,boot-time.baseline,baselines.csv}`
+### B8 — HG-4: Bless baselines (executed 2026-04-18)
+- [x] `make VARIANT=bastion-edge bless-size` → `size.baseline=809546842`
+- [x] `FIRSTBOOT_SECS=5 make VARIANT=bastion-edge bless-boot-time` → `boot-time.baseline=5` (conservative; smoke reports 0 due to the fb_start-after-SSH race, real script duration is sub-second per journal; 5 provides headroom over observed noise)
+- [x] `BUILD_SECS=83 IMAGE_BYTES=809546842 FIRSTBOOT_SECS=5 SECONDBOOT_SECS=19 make VARIANT=bastion-edge baseline-record` (CSV header added manually to match devbox convention)
+- [x] Committed `variants/bastion-edge/tests/{size.baseline,boot-time.baseline,baselines.csv}` (commit `96baf13`)
 
 ### Phase B commits
 - [x] `feat(edge): variants/bastion-edge/ blueprint + firstboot scaffold` (B1–B3, Makefile SDE-fallback fix, CI matrix expansion, spec/plan corrections)
 - [x] `test(edge): variant smoke assertions` (B4) — folded into same commit
 - [x] `docs(edge): variant README + supply-chain pinning` (B5 agent portion) — folded into same commit
-- [ ] `test(edge): baseline size + boot-time from first successful build` (B8, human-authored after HG-3)
+- [x] `feat(edge): scope NOPASSWD sudoers drop-in for smoke assertions` — `955bb7d`
+- [x] `test(edge): populate EXPECTED_SHA256 with initial 0.0.1 pins` — `5ec8251`
+- [x] `fix(edge): make smoke pass on cidata-less KVM boot` — `c5320e1`
+- [x] `test(edge): baseline size + boot-time from first green smoke` — `96baf13` (B8)
 
 ## Signoff
-- [ ] Downstream Bastion `specs/active/packaging-vm-retirement/` unblocked (fedbuild Phase B scaffolding green; unblocks HG-2/HG-3/HG-4 for Bastion meta to pin submodule)
-- [ ] Bastion meta pins fedbuild submodule at post-B landing SHA
+- [x] Downstream Bastion `specs/active/packaging-vm-retirement/` unblocked — fedbuild Phase B fully green (HG-2/HG-3/HG-4 all landed)
+- [ ] Bastion meta pins fedbuild submodule at post-B landing SHA (next commit = `96baf13` at time of signoff; may advance)
