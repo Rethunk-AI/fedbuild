@@ -6,8 +6,10 @@
 make deps                                  # install createrepo_c (once)
 cp ~/.ssh/id_ed25519.pub keys/authorized_key   # place your SSH pubkey
 make                                       # build RPM + local yum repo (default = devbox variant)
-make image                                 # build Fedora 43 VM image (needs sudo)
+make image                                 # build Fedora 43 VM image (needs sudo);
+                                           # emits .raw.zst (field dd) + .qcow2 (ADCON runtime)
 make smoke                                 # boot + assert firstboot (needs KVM)
+make publish-mirror                        # stage qcow2 + SBOM + provenance for ADCON mirror
 ```
 
 `make help` lists every target. `make variants` lists known variants. Full reference + gotchas in **[AGENTS.md](AGENTS.md)**.
@@ -23,6 +25,30 @@ make variants                  # list all known variants
 ```
 
 Per-variant state (blueprint, firstboot RPM, baselines, smoke assertions, optional `extra-rpms/` upstream pickup) lives under `variants/<name>/`. Per-variant build outputs land in `output/<name>/`. Adding a new variant: see [AGENTS.md § Variant anatomy](AGENTS.md#variant-anatomy-extended).
+
+## Publishing to the ADCON authoritative-mirror
+
+ADCON runtime VMs (the live VMs TheatreManagers + Theatres run as) boot from fedbuild qcow2 images served through bastion-core's authoritative-mirror. `make publish-mirror` stages the current variant's build output into the layout the mirror's route parser expects:
+
+```
+$(MIRROR_DIR)/vm-images/$(VARIANT)/$(VERSION)/
+├── <variant>-<version>-x86_64.qcow2
+├── <qcow2>.sha256
+├── SHA256SUMS[.sig,.pem]
+├── sbom.cdx.json / sbom.spdx.json
+└── provenance.json[.sig,.pem]
+```
+
+Defaults: `MIRROR_DIR=$(OUTDIR)/mirror-stage` (self-contained inside `output/<variant>/`). For production, override: `MIRROR_DIR=/var/lib/bastion/adcon-mirror make VARIANT=bastion-edge publish-mirror`. Aim bastion-core's `BASTION_ADCON_MIRROR_CACHE_DIR` at the same path.
+
+bastion-core's `GrpcQemuAdapter` resolves the runtime image from `BASTION_QEMU_IMAGE_DIR/<variant>.qcow2` (default `/var/lib/bastion/qemu/images`). After `make publish-mirror`, symlink (or copy) the landed qcow2 into that directory:
+
+```bash
+sudo ln -sfn /var/lib/bastion/adcon-mirror/vm-images/bastion-edge/0.1.0/bastion-edge-0.1.0-x86_64.qcow2 \
+             /var/lib/bastion/qemu/images/bastion-edge.qcow2
+```
+
+Full spec: meta-repo `specs/active/adcon-runtime-vm-fedbuild-migration/spec.md`.
 
 ## What First Boot Installs
 
