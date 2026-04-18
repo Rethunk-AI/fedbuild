@@ -14,8 +14,17 @@ set -euo pipefail
 
 SENTINEL_DIR=/var/lib/bastion-edge
 EDGE_ID_FILE="${SENTINEL_DIR}/edge-id"
-log()  { echo "[firstboot] $(date -Iseconds) $*"; }
-mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; }
+# Serial console for smoke markers. systemd's `StandardOutput=journal+console`
+# routes to /dev/console which on Fedora defaults to the last `console=` on
+# the kernel cmdline (tty0) and is further owned by `serial-getty@ttyS0` once
+# it starts, so markers routed via stdout never reach the host-side serial
+# capture. Write the smoke protocol directly to /dev/ttyS0 when present; in
+# production (no attached serial) the open-for-write becomes a no-op and the
+# same messages still land in the journal via stdout below.
+SERIAL=/dev/ttyS0
+serial() { [[ -w "$SERIAL" ]] && printf '%s\n' "$*" > "$SERIAL" 2>/dev/null || true; }
+log()  { echo "[firstboot] $(date -Iseconds) $*"; serial "[firstboot] $*"; }
+mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; serial "FEDBUILD_MARK: $*"; }
 
 on_exit() {
     local rc=$?
@@ -24,6 +33,7 @@ on_exit() {
         touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
         # Terminal marker — smoke greps this to fail fast instead of timing out.
         printf 'FEDBUILD_FAILED %d\n' "$rc"
+        serial "FEDBUILD_FAILED $rc"
     fi
 }
 trap on_exit EXIT
@@ -99,3 +109,4 @@ fi
 log "Done"
 # Terminal success marker — emit LAST so smoke's serial-grep sees edge-id first.
 printf 'FEDBUILD_READY\n'
+serial "FEDBUILD_READY"

@@ -1,8 +1,14 @@
 [Unit]
 Description=Bastion edge VM first-boot setup (edge-id stamp)
-After=cloud-init.target bastion-theatre-manager.service
-Wants=cloud-init.target
-Before=multi-user.target
+# Ordering note: the obvious `After=cloud-init.target Before=multi-user.target`
+# creates a cycle (cloud-final.service is After=multi-user.target on Fedora
+# systemd, so ordering before multi-user.target while waiting on cloud-init
+# closes the loop). Instead we run as a normal multi-user service after the
+# network is up. firstboot.sh already tolerates cidata-absent by falling back
+# to /etc/machine-id, and prod cidata is small enough that cloud-init usually
+# completes well before anything depends on edge-id.
+After=network-online.target bastion-theatre-manager.service
+Wants=network-online.target
 ConditionPathExists=!/var/lib/bastion-edge/done
 
 [Service]

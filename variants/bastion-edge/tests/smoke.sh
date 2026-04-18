@@ -185,7 +185,11 @@ export FIRSTBOOT_SECS
 FAIL=""
 
 log "TheatreManager"
-tm_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active bastion-theatre-manager 2>/dev/null || echo missing')
+# `systemctl show -p ActiveState --value` always exits 0 and prints a single
+# word (active|inactive|failed|…), unlike `is-active` which exits 3 on
+# inactive — an `|| echo fallback` there would append a second line and
+# break downstream equality checks.
+tm_state=$(ssh "${SSH_OPTS[@]}" 'systemctl show -p ActiveState --value bastion-theatre-manager 2>/dev/null')
 row "is-active" "$tm_state"
 [[ "$tm_state" == "active" ]] || { status "✗" "bastion-theatre-manager not active (got: $tm_state)"; FAIL=1; }
 
@@ -193,7 +197,7 @@ log "Firstboot sentinels"
 done_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-edge/done ]] && echo yes || echo no')
 failed_present=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-edge/failed ]] && echo yes || echo no')
 edge_id=$(ssh "${SSH_OPTS[@]}" 'cat /var/lib/bastion-edge/edge-id 2>/dev/null || echo ""')
-fb_state=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active bastion-edge-firstboot 2>/dev/null || echo missing')
+fb_state=$(ssh "${SSH_OPTS[@]}" 'systemctl show -p ActiveState --value bastion-edge-firstboot 2>/dev/null')
 row "done"     "$done_present"
 row "failed"   "$failed_present"
 row "edge-id"  "${edge_id:-<empty>}"
@@ -284,8 +288,8 @@ else
 
     post_mtime=$(ssh "${SSH_OPTS[@]}" 'stat -c%Y /var/lib/bastion-edge/done 2>/dev/null || echo 0')
     post_failed=$(ssh "${SSH_OPTS[@]}" '[[ -f /var/lib/bastion-edge/failed ]] && echo yes || echo no')
-    post_tm=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active bastion-theatre-manager 2>/dev/null || echo unknown')
-    post_fb=$(ssh "${SSH_OPTS[@]}" 'systemctl is-active bastion-edge-firstboot 2>/dev/null || echo unknown')
+    post_tm=$(ssh "${SSH_OPTS[@]}" 'systemctl show -p ActiveState --value bastion-theatre-manager 2>/dev/null')
+    post_fb=$(ssh "${SSH_OPTS[@]}" 'systemctl show -p ActiveState --value bastion-edge-firstboot 2>/dev/null')
     post_avc=$(ssh "${SSH_OPTS[@]}" \
         'sudo ausearch -m AVC,USER_AVC -ts boot 2>/dev/null | grep -c "^type=.*AVC" || true' \
         2>/dev/null)

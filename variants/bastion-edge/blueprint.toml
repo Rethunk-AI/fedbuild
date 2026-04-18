@@ -88,6 +88,17 @@ path = "/etc/dnf/dnf5-plugins/automatic.conf"
 mode = "0644"
 data = "[commands]\nupgrade_type = security\ndownload_updates = yes\napply_updates = yes\nrandom_sleep = 900\n\n[emitters]\nemit_via = stdio\n"
 
+# cloud-init: restrict to NoCloud + None. Default F43 cloud-init probes EC2 /
+# Azure / GCP metadata servers over IPv6 at boot; with no datasource attached
+# it hangs cloud-init-network.service for ~240 s waiting on fd00:ec2::254.
+# Edge is NoCloud-only (cidata CD in prod; None means "no datasource, skip
+# user-data") so restricting the list lets cloud-init finish quickly when no
+# cidata is attached (e.g. smoke) without changing prod behavior.
+[[customizations.files]]
+path = "/etc/cloud/cloud.cfg.d/99-bastion-edge.cfg"
+mode = "0644"
+data = "datasource_list: [ NoCloud, None ]\n"
+
 # Scoped NOPASSWD for smoke assertions.
 # edge-operator is in `wheel` (for TTY ops), but `wheel` on Fedora defaults to
 # password-required. Smoke drives reboot-persistence and AVC audits over SSH
