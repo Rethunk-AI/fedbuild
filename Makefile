@@ -62,7 +62,8 @@ deps:
 ## reproducers; see spec F5/F5a.
 $(RPM): $(SPECFILE) $(SOURCES)
 	mkdir -p $(TOPDIR)/{BUILD,RPMS,SRPMS,SPECS,SOURCES}
-	@sde=$${SOURCE_DATE_EPOCH:-$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null || date +%s)}; \
+	@sde=$${SOURCE_DATE_EPOCH:-$$(git log -1 --format=%ct -- $(SPECFILE) $(SRCDIR) 2>/dev/null)}; \
+	 sde=$${sde:-$$(date +%s)}; \
 	 sha=$$(git rev-parse HEAD 2>/dev/null || echo unknown); \
 	 echo "VARIANT=$(VARIANT) SOURCE_DATE_EPOCH=$$sde GIT_COMMIT=$$sha"; \
 	 env LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=$$sde rpmbuild \
