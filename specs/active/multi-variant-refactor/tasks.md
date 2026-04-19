@@ -96,8 +96,8 @@ fedbuild's variant slot stays named `bastion-edge` (Bastion tier-3+4 concept). B
 
 ### B5 — Docs + extra-rpms workflow
 - [x] `variants/bastion-edge/README.md` explains the two-RPM `yarn release:rpm:*` → `extra-rpms/` flow + EXPECTED_SHA256 population
-- [ ] Update top-level `README.md` variant table with bastion-edge row (already multi-variant-framed; verify the row exists and matches reality)
-- [ ] Update `AGENTS.md` Variants section (verify same)
+- [x] Update top-level `README.md` variant table with bastion-edge row (already multi-variant-framed; verify the row exists and matches reality)
+- [x] Update `AGENTS.md` Variants section (verify same) — added § Variants table mirroring README (2026-04-18)
 
 ### B6 — HG-2: Image build (executed 2026-04-18, autonomous after passwordless-sudo grant for image-builder + osbuild)
 - [x] `cp ~/.ssh/id_ed25519.pub keys/authorized_key` (pre-existing)
@@ -131,4 +131,4 @@ fedbuild's variant slot stays named `bastion-edge` (Bastion tier-3+4 concept). B
 
 ## Signoff
 - [x] Downstream Bastion `specs/active/packaging-vm-retirement/` unblocked — fedbuild Phase B fully green (HG-2/HG-3/HG-4 all landed)
-- [ ] Bastion meta pins fedbuild submodule at post-B landing SHA (next commit = `96baf13` at time of signoff; may advance)
+- [x] Bastion meta pins fedbuild submodule at post-B landing SHA — verified `/usr/local/src/com.github/Rethunk-Tech/Bastion` gitlink `fedbuild` @ `0fae586` matches `fedbuild` `origin/main` (includes Phase B baselines + subsequent mainline commits)

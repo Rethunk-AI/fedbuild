@@ -4,6 +4,15 @@ Builds reproducible Fedora 43 VM images for Bastion. **Multi-variant** since 202
 
 Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox with Homebrew + dev toolchain. Other variants (e.g. `bastion-edge`) live as sibling subdirectories under `variants/`.
 
+## Variants
+
+| Variant | Purpose | Built by |
+|---------|---------|----------|
+| `devbox` | Bastion Agent (Claude Code, Gemini CLI) sandbox — Homebrew + dev toolchain | `make` (default) |
+| `bastion-edge` | Field-deployable image with `bastion-theatre-manager` daemon pre-enabled (Fedora 43 minimal, no Homebrew, no dev tools) | `make VARIANT=bastion-edge image` |
+
+See [`README.md`](README.md) § Variants for the same table in operator-facing docs. Per-variant inputs and smoke details live in `variants/<name>/README.md`.
+
 ## Variant dispatch
 
 ```bash
