@@ -120,6 +120,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
+	sudo chown -R "$$(id -u):$$(id -g)" $(OUTDIR)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
 	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
