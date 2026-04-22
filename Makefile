@@ -114,6 +114,10 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 ## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
 ## convert so both formats descend from one reproducible image-builder output.
 image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
+	@pid_file=$(OUTDIR)/run/qemu.pid; \
+	 if [ -f "$$pid_file" ] && kill -0 "$$(cat $$pid_file)" 2>/dev/null; then \
+	     echo "ERROR: $(VARIANT) VM is running (PID $$(cat $$pid_file)) — run: make VARIANT=$(VARIANT) stop-vm"; exit 1; \
+	 fi
 	mkdir -p $(OUTDIR)
 	sudo image-builder build              \
 		--distro     fedora-43            \
@@ -122,7 +126,7 @@ image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
-	sudo chown -R "${SUDO_UID:-$(shell id -u)}:${SUDO_GID:-$(shell id -g)}" $(OUTDIR)
+	sudo chown -R "$${SUDO_UID:-$(shell id -u)}:$${SUDO_GID:-$(shell id -g)}" $(OUTDIR)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
 	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
