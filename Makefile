@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image publish-mirror smoke smoke-qcow2 run-vm stop-vm ssh-vm vm-status clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants
+.PHONY: all deps rpm repo image publish-mirror smoke smoke-qcow2 run-vm stop-vm ssh-vm vm-status clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants build-extra-rpms check-extra-rpms
 
 # ── Variant dispatch ──────────────────────────────────────────────────────────
 # `make` (no arg) defaults to the devbox variant. Override with VARIANT=<name>.
@@ -112,7 +112,7 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 ## Produces both raw.zst (field-deploy; dd to media) and qcow2 (ADCON runtime;
 ## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
 ## convert so both formats descend from one reproducible image-builder output.
-image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
+image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	mkdir -p $(OUTDIR)
 	sudo image-builder build              \
 		--distro     fedora-43            \
@@ -121,7 +121,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
-	sudo chown -R "$(shell id -u):$(shell id -g)" $(OUTDIR)
+	sudo chown -R "${SUDO_UID:-$(shell id -u)}:${SUDO_GID:-$(shell id -g)}" $(OUTDIR)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
 	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
@@ -144,6 +144,36 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	 stat -c%s "$$img" > $(SIZE_FILE); \
 	 echo "Wrote $(SIZE_FILE) ($$(cat $(SIZE_FILE)) bytes — raw.zst basis)"
 	@$(MAKE) --no-print-directory check-size
+
+## build-extra-rpms: rebuild all extra-rpms for this variant from source repos (then re-run make image)
+build-extra-rpms:
+	@test -f $(VARIANT_DIR)/scripts/build-extra-rpms.sh || \
+	    { echo "ERROR: $(VARIANT_DIR)/scripts/build-extra-rpms.sh not found — variant has no extra-rpms build script"; exit 1; }
+	bash $(VARIANT_DIR)/scripts/build-extra-rpms.sh
+
+## check-extra-rpms: gate — fail if any extra-rpm is stale relative to its source repo's latest commit
+## Stale = source repo has a commit newer than the RPM's mtime on disk.
+## Run `make VARIANT=$(VARIANT) build-extra-rpms` to rebuild, then retry.
+check-extra-rpms:
+	@if [ ! -d $(EXTRA_RPMS_DIR) ] || [ -z "$$(find $(EXTRA_RPMS_DIR) -maxdepth 1 -name '*.rpm' -print -quit)" ]; then \
+	     echo "check-extra-rpms: no extra-rpms for VARIANT=$(VARIANT) — skipping"; exit 0; \
+	 fi; \
+	 meta=$(FEDBUILD)/..; failed=0; \
+	 for rpm in $$(find $(EXTRA_RPMS_DIR) -maxdepth 1 -name '*.rpm'); do \
+	     pkg=$$(rpm -qp --qf '%{NAME}' "$$rpm" 2>/dev/null); \
+	     repo="$$meta/$$pkg"; \
+	     [ -d "$$repo/.git" ] || continue; \
+	     src_ts=$$(git -C "$$repo" log -1 --format=%ct); \
+	     rpm_ts=$$(stat -c%Y "$$rpm"); \
+	     if [ "$$src_ts" -gt "$$rpm_ts" ]; then \
+	         echo "STALE: $$(basename $$rpm) — source newer by $$(( src_ts - rpm_ts ))s ($(VARIANT_DIR)/extra-rpms/)"; \
+	         failed=1; \
+	     fi; \
+	 done; \
+	 if [ "$$failed" -eq 1 ]; then \
+	     echo "ERROR: stale extra-rpms detected — run: make VARIANT=$(VARIANT) build-extra-rpms"; exit 1; \
+	 fi; \
+	 echo "check-extra-rpms: OK"
 
 ## check: fast pre-push checks — shellcheck, TOML syntax, actionlint, settings schema (no RPM build)
 check: check-versions check-settings shellcheck
