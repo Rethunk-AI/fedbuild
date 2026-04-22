@@ -322,7 +322,6 @@ smoke:
 	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
 	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
 		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
-	SSH_KEY="$${SSH_KEY:-keys/bastion-operator-key}" \
 	SSH_PORT="$${SSH_PORT:-2223}" \
 	bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
 

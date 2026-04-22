@@ -5,15 +5,18 @@
 # Usage: bash tests/smoke.sh [output-dir]
 #   or:  make VARIANT=bastion-core smoke
 #
+# No pre-existing SSH key required. An ephemeral ed25519 keypair is generated
+# at startup and injected into the VM via the cloud-init NoCloud seed ISO.
+# Both halves are deleted on exit.
+#
 # Requirements:
 #   - qemu-system-x86_64 with KVM (/dev/kvm accessible)
 #   - edk2-ovmf (UEFI firmware; minimal-raw-zst images are UEFI-only)
-#   - genisoimage or mkisofs (cloud-init NoCloud seed ISO)
-#   - SSH private key at $SSH_KEY (default: keys/bastion-operator-key)
+#   - genisoimage, mkisofs, or xorrisofs (cloud-init NoCloud seed ISO)
+#   - ssh-keygen (ephemeral keypair generation)
 #   - A built qcow2 from: make VARIANT=bastion-core image
 #
 # Environment overrides (all optional):
-#   SSH_KEY           path to SSH private key (default: keys/bastion-operator-key)
 #   SSH_PORT          host port forwarded to VM :22  (default: 2223)
 #   VM_MEM            QEMU RAM in MiB               (default: 8192)
 #   VM_SMP            QEMU vCPU count               (default: 4)
@@ -25,7 +28,6 @@
 set -euo pipefail
 
 OUTDIR="${1:-output/bastion-core}"
-SSH_KEY="${SSH_KEY:-keys/bastion-operator-key}"
 SSH_PORT="${SSH_PORT:-2223}"
 VM_MEM="${VM_MEM:-8192}"
 VM_SMP="${VM_SMP:-4}"
@@ -41,6 +43,11 @@ SSH_UP=0
 FINISHED=0
 QEMU_PID=""
 TAIL_PID=""
+TMPKEY=""
+TMPVARS=""
+TMPIMAGE=""
+TMPSEEDDIR=""
+TMPSEED=""
 START_EPOCH=$(date +%s)
 
 log()  { echo "[smoke] $(date -Iseconds) $*"; }
@@ -60,7 +67,7 @@ dump_journal() {
 die() {
     log "ERROR: $*"
     echo "[smoke] ERROR: $*" >&2
-    [[ -s "$QEMU_LOG" ]] && sed 's/^/[qemu] /' "$QEMU_LOG"
+    [[ -s "$QEMU_LOG"  ]] && sed 's/^/[qemu] /' "$QEMU_LOG"
     [[ -s "$SERIAL_LOG" ]] && { log "Last 40 serial lines:"; tail -40 "$SERIAL_LOG" | sed 's/^/[vm] /'; }
     dump_journal
     exit 1
@@ -68,18 +75,20 @@ die() {
 
 cleanup() {
     dump_journal 2>/dev/null || true
-    [[ -n "$TAIL_PID"  ]] && kill "$TAIL_PID"  2>/dev/null || true
-    [[ -n "$QEMU_PID"  ]] && kill "$QEMU_PID"  2>/dev/null || true
-    [[ -n "${TMPVARS:-}"   ]] && rm -f "$TMPVARS"
-    [[ -n "${TMPIMAGE:-}"  ]] && rm -f "$TMPIMAGE"
-    [[ -n "${TMPSEEDDIR:-}" ]] && rm -rf "$TMPSEEDDIR"
+    [[ -n "$TAIL_PID"   ]] && kill "$TAIL_PID"   2>/dev/null || true
+    [[ -n "$QEMU_PID"   ]] && kill "$QEMU_PID"   2>/dev/null || true
+    [[ -n "$TMPVARS"    ]] && rm -f  "$TMPVARS"
+    [[ -n "$TMPIMAGE"   ]] && rm -f  "$TMPIMAGE"
+    [[ -n "$TMPSEED"    ]] && rm -f  "$TMPSEED"
+    [[ -n "$TMPSEEDDIR" ]] && rm -rf "$TMPSEEDDIR"
+    [[ -n "$TMPKEY"     ]] && rm -f  "$TMPKEY" "${TMPKEY}.pub"
 }
 trap cleanup EXIT
 
 # ── Validate prerequisites ────────────────────────────────────────────────────
-[[ -r "$SSH_KEY" ]] || die "SSH private key not readable: $SSH_KEY  (set SSH_KEY=<path>)"
 [[ -d "$OUTDIR"  ]] || die "$OUTDIR not found — run: make VARIANT=bastion-core image"
 command -v qemu-system-x86_64 >/dev/null 2>&1 || die "qemu-system-x86_64 not found"
+command -v ssh-keygen           >/dev/null 2>&1 || die "ssh-keygen not found"
 [[ -e /dev/kvm ]] || die "/dev/kvm not accessible — KVM required for bastion-core smoke"
 
 ISOGEN=""
@@ -91,8 +100,8 @@ done
 OVMF_CODE="${OVMF_CODE:-}"
 OVMF_VARS_SRC="${OVMF_VARS_SRC:-}"
 for d in /usr/share/edk2/ovmf /usr/share/OVMF /usr/share/qemu; do
-    [[ -z "$OVMF_CODE"     && -r "$d/OVMF_CODE.fd"  ]] && OVMF_CODE="$d/OVMF_CODE.fd"
-    [[ -z "$OVMF_VARS_SRC" && -r "$d/OVMF_VARS.fd"  ]] && OVMF_VARS_SRC="$d/OVMF_VARS.fd"
+    [[ -z "$OVMF_CODE"     && -r "$d/OVMF_CODE.fd" ]] && OVMF_CODE="$d/OVMF_CODE.fd"
+    [[ -z "$OVMF_VARS_SRC" && -r "$d/OVMF_VARS.fd" ]] && OVMF_VARS_SRC="$d/OVMF_VARS.fd"
 done
 [[ -r "$OVMF_CODE"     ]] || die "OVMF_CODE.fd not found (install edk2-ovmf)"
 [[ -r "$OVMF_VARS_SRC" ]] || die "OVMF_VARS.fd not found (install edk2-ovmf)"
@@ -102,6 +111,15 @@ IMAGE=$(find "$OUTDIR" -maxdepth 1 -name '*.qcow2' | sort | tail -1)
 [[ -n "$IMAGE" ]] || die "no .qcow2 in $OUTDIR — run: make VARIANT=bastion-core image"
 log "Image: $IMAGE"
 
+# ── Ephemeral SSH keypair ─────────────────────────────────────────────────────
+# Generated fresh each run; injected via cloud-init; discarded on exit.
+# No private key needs to exist in the repo or on disk before smoke runs.
+TMPKEY=$(mktemp /tmp/smoke-key-XXXXXX)
+rm -f "$TMPKEY"   # ssh-keygen won't overwrite an existing file
+ssh-keygen -t ed25519 -f "$TMPKEY" -N "" -C "bastion-core-smoke" -q
+SMOKE_PUBKEY=$(cat "${TMPKEY}.pub")
+log "Ephemeral smoke keypair generated"
+
 # ── Stage ephemeral copies ────────────────────────────────────────────────────
 TMPIMAGE=$(mktemp /tmp/smoke-XXXXXX.qcow2)
 TMPVARS=$(mktemp /tmp/smoke-vars-XXXXXX.fd)
@@ -110,17 +128,24 @@ cp --reflink=auto "$IMAGE" "$TMPIMAGE"
 cp "$OVMF_VARS_SRC" "$TMPVARS"
 
 # ── Cloud-init NoCloud seed ISO ───────────────────────────────────────────────
-# Prevents cloud-init from hanging waiting for a network datasource.
-# NetworkManager handles DHCP automatically; cloud-init only needs to
-# be satisfied that a datasource exists.
+# Injects the ephemeral public key as an authorized key for bastion-operator.
+# Also prevents cloud-init from hanging waiting for a network datasource.
 TMPSEEDDIR=$(mktemp -d /tmp/smoke-seed-XXXXXX)
-printf 'instance-id: bastion-core-smoke\nlocal-hostname: bastion-core\n' \
-    > "$TMPSEEDDIR/meta-data"
-printf '#cloud-config\n' > "$TMPSEEDDIR/user-data"
+cat > "$TMPSEEDDIR/meta-data" <<EOF
+instance-id: bastion-core-smoke
+local-hostname: bastion-core
+EOF
+cat > "$TMPSEEDDIR/user-data" <<EOF
+#cloud-config
+users:
+  - name: bastion-operator
+    ssh_authorized_keys:
+      - ${SMOKE_PUBKEY}
+EOF
 TMPSEED=$(mktemp /tmp/smoke-seed-XXXXXX.iso)
 "$ISOGEN" -output "$TMPSEED" -volid cidata -joliet -rock \
     "$TMPSEEDDIR/meta-data" "$TMPSEEDDIR/user-data" 2>/dev/null
-log "Seed ISO: $TMPSEED"
+log "Seed ISO with ephemeral pubkey: $TMPSEED"
 
 mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
@@ -158,7 +183,7 @@ SSH_OPTS=(
     -o GlobalKnownHostsFile=/dev/null
     -o LogLevel=ERROR
     -o ConnectTimeout=5
-    -i "$SSH_KEY"
+    -i "$TMPKEY"
     -p "$SSH_PORT"
     bastion-operator@localhost
 )
@@ -273,7 +298,7 @@ fi
 log "── SELinux"
 selinux_mode=$(command ssh "${SSH_OPTS[@]}" "getenforce 2>/dev/null || echo unknown")
 row "enforce" "$selinux_mode"
-[[ "$selinux_mode" == "Enforcing" ]] || sub "  WARN: not Enforcing"
+[[ "$selinux_mode" == "Enforcing" ]] || { sub "  WARN: not Enforcing"; WARN_COUNT=$(( WARN_COUNT + 1 )); }
 
 # ── 8. AVC denials since boot ─────────────────────────────────────────────────
 log "── AVC denials"
