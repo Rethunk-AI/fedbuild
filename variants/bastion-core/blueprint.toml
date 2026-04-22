@@ -21,6 +21,9 @@ packages = [
     { name = "sudo",                   version = "*" },
     { name = "ca-certificates",        version = "*" },
     { name = "glibc-minimal-langpack", version = "*" },
+    # NetworkManager: DHCP client daemon for virtio NIC — required for SLIRP
+    # network (QEMU usermode) to assign 10.0.2.15 and for SSH hostfwd to work.
+    { name = "NetworkManager",         version = "*" },
     # cloud-init: firstboot reads NoCloud meta-data for per-VM identity
     { name = "cloud-init",             version = "*" },
     # audit: AVC denial visibility
