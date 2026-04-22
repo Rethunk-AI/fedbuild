@@ -26,6 +26,7 @@ BLUEPRINT           := $(VARIANT_DIR)/blueprint.toml
 KEYFILE             := $(FEDBUILD)/keys/authorized_key
 BLUEPRINT_EFFECTIVE := $(VARIANT_DIR)/blueprint.effective.toml
 EXTRA_RPMS_DIR      := $(VARIANT_DIR)/extra-rpms
+EXTRA_RPMS_FILES    := $(wildcard $(EXTRA_RPMS_DIR)/*.rpm)
 EXTRA_RPMS_MANIFEST := $(EXTRA_RPMS_DIR)/EXPECTED_SHA256
 SHA256SUMS_FILE     := $(OUTDIR)/SHA256SUMS
 SHA256SUMS_SIG      := $(OUTDIR)/SHA256SUMS.sig
@@ -83,7 +84,7 @@ rpm: $(RPM)
 ## extra-rpms supply chain (F7a): if EXPECTED_SHA256 manifest is present,
 ## verify each upstream RPM matches before folding it in. Otherwise warn but
 ## continue (operator accepts responsibility per variant README).
-$(REPO_MARKER): $(RPM)
+$(REPO_MARKER): $(RPM) $(EXTRA_RPMS_FILES)
 	@command -v createrepo >/dev/null 2>&1 || \
 		{ echo "createrepo_c not found — run: make deps"; exit 1; }
 	rm -rf $(REPODIR)

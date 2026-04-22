@@ -63,8 +63,8 @@ build_bastion_core() {
     RPM_VERSION="${VERSION}" \
     BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
       packaging/rpm/build-rpm.sh
-    # build-rpm.sh does not honor BASTION_RPM_OUT_DIR; always copy from rpmbuild output
-    find packaging/rpm/rpmbuild/RPMS -name 'bastion-core-*.rpm' \
+    # build-rpm.sh does not honor BASTION_RPM_OUT_DIR; copy only the version just built
+    find packaging/rpm/rpmbuild/RPMS -name "bastion-core-${VERSION}-*.rpm" \
       -exec cp -v {} "${EXTRA_RPMS}/" \;
   )
 }
