@@ -36,6 +36,12 @@ mark "firstboot-start"
 
 install -d -m 0755 "$SENTINEL_DIR"
 
+# Sidecar service units declare ReadWritePaths=/var/log/bastion; systemd
+# namespace setup fails (226/NAMESPACE) if the directory doesn't exist.
+install -d -m 0755 /var/log/bastion
+chown root:bastion /var/log/bastion
+chmod 0775 /var/log/bastion
+
 # ── Roll PKI — generate unique SAI + service-ca per VM ──────────────────────
 # bastion-package-init ran during RPM %post (image build time) and already
 # populated /var/lib/bastion/install/bootstrap.env with a default SAI.

@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -74,6 +74,11 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.5.0-1
+- Create /var/log/bastion (root:bastion 0775) before services start;
+  sidecar units declare ReadWritePaths=/var/log/bastion — missing dir
+  causes 226/NAMESPACE failure at every restart.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.4.0-1
 - Fix service-ca ownership: chown bastion:bastion (not root:bastion); read-service-ca.ts
   requires uid=gid=process or uid=gid=0; mixed owner fails both checks.
