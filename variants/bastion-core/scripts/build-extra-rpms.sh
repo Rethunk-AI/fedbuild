@@ -46,6 +46,7 @@ build_sidecar() {
     return 0
   fi
   echo "Building ${name} …"
+  rm -f "${EXTRA_RPMS}/${name}-"*.rpm
   GOWORK=off \
   BASTION_RPM_VERSION="${VERSION}" \
   BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
@@ -56,16 +57,15 @@ build_sidecar() {
 build_bastion_core() {
   local repo_path="${META_ROOT}/bastion-core"
   echo "Building bastion-core …"
+  rm -f "${EXTRA_RPMS}/bastion-core-"*.rpm
   (
     cd "$repo_path"
     RPM_VERSION="${VERSION}" \
     BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
       packaging/rpm/build-rpm.sh
-    # build-rpm.sh outputs to packaging/rpm/rpmbuild/RPMS/; copy if needed
-    if [[ -z "$(ls "${EXTRA_RPMS}/bastion-core-"*.rpm 2>/dev/null)" ]]; then
-      find packaging/rpm/rpmbuild/RPMS -name 'bastion-core-*.rpm' \
-        -exec cp {} "${EXTRA_RPMS}/" \;
-    fi
+    # build-rpm.sh does not honor BASTION_RPM_OUT_DIR; always copy from rpmbuild output
+    find packaging/rpm/rpmbuild/RPMS -name 'bastion-core-*.rpm' \
+      -exec cp -v {} "${EXTRA_RPMS}/" \;
   )
 }
 

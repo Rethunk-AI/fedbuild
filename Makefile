@@ -146,10 +146,11 @@ image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	@$(MAKE) --no-print-directory check-size
 
 ## build-extra-rpms: rebuild all extra-rpms for this variant from source repos (then re-run make image)
+## Passes BASTION_RPM_VERSION=$(PKG_VERSION) so all built RPMs match the variant's declared version.
 build-extra-rpms:
 	@test -f $(VARIANT_DIR)/scripts/build-extra-rpms.sh || \
 	    { echo "ERROR: $(VARIANT_DIR)/scripts/build-extra-rpms.sh not found — variant has no extra-rpms build script"; exit 1; }
-	bash $(VARIANT_DIR)/scripts/build-extra-rpms.sh
+	BASTION_RPM_VERSION=$(PKG_VERSION) bash $(VARIANT_DIR)/scripts/build-extra-rpms.sh
 
 ## check-extra-rpms: gate — fail if any extra-rpm is stale relative to its source repo's latest commit
 ## Stale = source repo has a commit newer than the RPM's mtime on disk.
