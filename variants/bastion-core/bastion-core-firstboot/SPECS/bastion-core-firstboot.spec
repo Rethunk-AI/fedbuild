@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.6.0
+Version:        0.1.0
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -74,37 +74,10 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
-* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.6.0-1
-- Generate BASTION_HOST_CREDENTIAL_AT_REST_KEY and write to /etc/bastion/bastion.env.
-- Add drop-in for bastion-credential-keystore.service fixing flag names:
-  RPM packaged -cert/-key instead of -tls-cert/-tls-key; binary exits 2/INVALIDARGUMENT.
-
-* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.5.0-1
-- Create /var/log/bastion (root:bastion 0775) before services start;
-  sidecar units declare ReadWritePaths=/var/log/bastion — missing dir
-  causes 226/NAMESPACE failure at every restart.
-
-* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.4.0-1
-- Fix service-ca ownership: chown bastion:bastion (not root:bastion); read-service-ca.ts
-  requires uid=gid=process or uid=gid=0; mixed owner fails both checks.
-
-* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.3.0-1
-- chown service-ca tree to root:bastion after provision so bastion user can read certs.
-- Set chmod 750 on service-ca dir, 640 on certs/keys and issued/ subtree.
-
-* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.2.0-1
-- Run bastion-provision at firstboot to create service-plane CA and issue all
-  sidecar TLS leaf certs; fixes bastion-qemu.service 226/NAMESPACE failure.
-- Create /var/lib/bastion/qemu (ReadWritePaths dir required before exec).
-- Symlink ca.pem -> ca.crt in service-ca dir (Go binary references ca.pem).
-- Add bastion-qemu.service.d drop-in for After=bastion-core-firstboot.service.
-- Write {"type":"module"} to /usr/lib64/bastion-core/package.json before
-  invoking node; bastion-core dist compiled with module:NodeNext emits ESM
-  import statements that cause SyntaxError without the ESM marker. Proper fix
-  belongs in bastion-core.spec %install; this unblocks firstboot now.
-- Pipe node output through tee /dev/ttyS0 so provision errors are visible on
-  serial console without requiring SSH access post-failure.
-
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.0-1
-- Initial: PKI roll (BASTION_PKI_EPOCH_ROLL=1) at first boot; SAI stamp;
-  bastion-core.service drop-in for ordering.
+- Roll PKI (BASTION_PKI_EPOCH_ROLL=1) at first boot for unique per-VM identity.
+- Provision service-plane CA and issue sidecar TLS leaf certs via bastion-provision.
+- Create /var/log/bastion, /var/lib/bastion/qemu, /etc/bastion with correct ownership.
+- Generate BASTION_HOST_CREDENTIAL_AT_REST_KEY and write to /etc/bastion/bastion.env.
+- Fix bastion-credential-keystore.service TLS flag names via systemd drop-in.
+- Stamp SAI callsign; add ordering drop-ins for bastion-core and bastion-qemu services.
