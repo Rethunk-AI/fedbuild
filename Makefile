@@ -108,7 +108,7 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 	@test -f $(KEYFILE) || { echo "ERROR: keys/authorized_key not found"; exit 1; }
 	sed "s|ssh-ed25519 CHANGEME user@localhost|$$(cat $(KEYFILE))|" $(BLUEPRINT) > $(BLUEPRINT_EFFECTIVE)
 
-## image: build the variant's VM image (requires sudo)
+## image: build the variant's VM image (image-builder and chown require sudo nopasswd)
 ## Produces both raw.zst (field-deploy; dd to media) and qcow2 (ADCON runtime;
 ## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
 ## convert so both formats descend from one reproducible image-builder output.
@@ -121,7 +121,7 @@ image: $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
-	sudo chown -R "$$(id -u):$$(id -g)" $(OUTDIR)
+	sudo chown -R "$(shell id -u):$(shell id -g)" $(OUTDIR)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
 	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
