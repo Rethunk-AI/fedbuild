@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [devbox, bastion-edge]
+        variant: [devbox, bastion-edge, bastion-core]
         # Add new variants to this list as they land. Keep ordering stable for
         # deterministic CI run ordering.
 

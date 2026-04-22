@@ -1,0 +1,31 @@
+[Unit]
+Description=Bastion core VM first-boot setup (PKI roll + SAI generation)
+# Run before the C2 server starts so bootstrap.env exists when bastion-core
+# reads it. bastion-core.service.d/10-firstboot-ordering.conf (shipped by this
+# RPM) adds `After=bastion-core-firstboot.service` on the server side.
+After=network-online.target
+Wants=network-online.target
+Before=bastion-core.service
+ConditionPathExists=!/var/lib/bastion/firstboot-done
+
+[Service]
+Type=oneshot
+TimeoutStartSec=300
+User=root
+ExecStartPre=+/usr/bin/install -d -m 0755 /var/lib/bastion-core
+ExecStart=/usr/libexec/bastion-core-firstboot/firstboot.sh
+ExecStartPost=/usr/bin/touch /var/lib/bastion/firstboot-done
+StandardOutput=journal+console
+StandardError=journal+console
+RemainAfterExit=yes
+
+NoNewPrivileges=false
+PrivateTmp=false
+# package-bootstrap-init.js writes to /var/lib/bastion — strict ProtectSystem
+# would block that. Run with full write access; the script itself is trusted.
+ProtectSystem=no
+ProtectHome=true
+ReadWritePaths=/var/lib/bastion /var/log/bastion /run/bastion /var/lib/bastion-core
+
+[Install]
+WantedBy=multi-user.target

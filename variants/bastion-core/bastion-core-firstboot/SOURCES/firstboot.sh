@@ -1,0 +1,80 @@
+#!/bin/bash
+# bastion-core-firstboot — runs once on first boot as root.
+#
+# Purpose:
+#   1. Roll the PKI (BASTION_PKI_EPOCH_ROLL=1) so each VM gets unique
+#      cryptographic identity rather than the image-baked defaults generated
+#      during RPM %post at image build time.
+#   2. Source /var/lib/bastion/install/bootstrap.env and record the per-VM SAI
+#      callsign in /var/lib/bastion-core/core-id.
+#   3. Write /etc/bastion-core-release (consumed by smoke + operators).
+#
+# The bastion-core-firstboot.service unit has:
+#   ConditionPathExists=!/var/lib/bastion/firstboot-done
+# so this runs at most once per VM lifetime. Delete firstboot-done to re-run.
+set -euo pipefail
+
+SENTINEL_DIR=/var/lib/bastion-core
+SERIAL=/dev/ttyS0
+serial() { [[ -w "$SERIAL" ]] && printf '%s\n' "$*" > "$SERIAL" 2>/dev/null || true; }
+log()  { echo "[firstboot] $(date -Iseconds) $*"; serial "[firstboot] $*"; }
+mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; serial "FEDBUILD_MARK: $*"; }
+
+on_exit() {
+    local rc=$?
+    if [[ $rc -ne 0 ]]; then
+        log "FAILED (exit $rc) — writing failure sentinel"
+        touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
+        printf 'FEDBUILD_FAILED %d\n' "$rc"
+        serial "FEDBUILD_FAILED $rc"
+    fi
+}
+trap on_exit EXIT
+
+log "Starting"
+mark "firstboot-start"
+
+install -d -m 0755 "$SENTINEL_DIR"
+
+# ── Roll PKI — generate unique SAI + service-ca per VM ──────────────────────
+# bastion-package-init ran during RPM %post (image build time) and already
+# populated /var/lib/bastion/install/bootstrap.env with a default SAI.
+# BASTION_PKI_EPOCH_ROLL=1 forces regeneration so every booted VM gets a
+# unique callsign, BASTION_WS_TOKEN, and PKI leaf set.
+PACKAGE_INIT=/usr/libexec/bastion-core/bastion-package-init
+if [[ ! -x "$PACKAGE_INIT" ]]; then
+    log "ERROR: $PACKAGE_INIT not found — is bastion-core RPM installed?"
+    exit 1
+fi
+
+log "Rolling PKI (BASTION_PKI_EPOCH_ROLL=1) …"
+mark "pki-roll-start"
+BASTION_PKI_EPOCH_ROLL=1 "$PACKAGE_INIT"
+log "PKI rolled"
+mark "pki-roll-done"
+
+# ── Read generated SAI ───────────────────────────────────────────────────────
+BOOTSTRAP_ENV=/var/lib/bastion/install/bootstrap.env
+if [[ ! -r "$BOOTSTRAP_ENV" ]]; then
+    log "ERROR: $BOOTSTRAP_ENV not written by package-init"
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$BOOTSTRAP_ENV"
+
+SAI_CALLSIGN="${BASTION_SAI_CALLSIGN:-UNKNOWN}"
+log "SAI callsign: $SAI_CALLSIGN"
+printf '%s\n' "$SAI_CALLSIGN" > "${SENTINEL_DIR}/core-id"
+chmod 0644 "${SENTINEL_DIR}/core-id"
+mark "sai-stamped"
+
+# ── Emit release snapshot ────────────────────────────────────────────────────
+if [[ -r /etc/bastion-core-release ]]; then
+    sed 's/^/  /' /etc/bastion-core-release
+else
+    log "WARN: /etc/bastion-core-release missing (RPM %post regression)"
+fi
+
+log "Done"
+printf 'FEDBUILD_READY\n'
+serial "FEDBUILD_READY"
