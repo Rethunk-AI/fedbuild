@@ -79,15 +79,16 @@ node "$PROVISION_JS" 2>&1 | tee /dev/ttyS0
 log "Service-plane CA provisioned"
 mark "service-ca-done"
 
-# Grant bastion user read access to service-ca (created as root by provision).
-chmod 750 /var/lib/bastion/service-ca
-chown -R root:bastion /var/lib/bastion/service-ca
-chmod 640 /var/lib/bastion/service-ca/*.crt /var/lib/bastion/service-ca/*.key 2>/dev/null || true
-find /var/lib/bastion/service-ca/issued -type f \
-    \( -name '*.pem' -o -name '*.key' \) \
+# Grant bastion user ownership of service-ca (created as root by provision).
+# read-service-ca.ts requires uid=gid=process or uid=gid=0; bastion:bastion satisfies
+# the former, root:bastion (mixed) satisfies neither.
+chown -R bastion:bastion /var/lib/bastion/service-ca
+chmod 700 /var/lib/bastion/service-ca
+find /var/lib/bastion/service-ca -type f \
+    \( -name '*.crt' -o -name '*.key' -o -name '*.pem' \) \
     -exec chmod 640 {} + 2>/dev/null || true
 find /var/lib/bastion/service-ca/issued -type d \
-    -exec chmod 750 {} + 2>/dev/null || true
+    -exec chmod 700 {} + 2>/dev/null || true
 
 # bastion-qemu.service ReadWritePaths requires /var/lib/bastion/qemu at exec time.
 install -d -m 0750 /var/lib/bastion/qemu
