@@ -75,6 +75,7 @@ $(RPM): $(SPECFILE) $(SOURCES)
 		--define "use_source_date_epoch_as_buildtime 1" \
 		--define "source_date_epoch_from_changelog 0"   \
 		-ba $(SPECFILE)
+	@touch $@
 
 rpm: $(RPM)
 
@@ -315,22 +316,18 @@ diff-packages:
 	@bash $(VARIANT_TESTS)/diff-packages.sh
 
 ## smoke: boot VM in QEMU/KVM and verify firstboot (requires built image + KVM)
-## Boots the raw.zst (field-deploy target) unless SMOKE_FORMAT=qcow2 is set.
+## SSH_KEY must point to the private key matching keys/authorized_key.
+## SSH_PORT defaults to 2223 (bastion-core) or 2222 (devbox).
 smoke:
 	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
 	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
 		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
+	SSH_KEY="$${SSH_KEY:-keys/bastion-operator-key}" \
+	SSH_PORT="$${SSH_PORT:-2223}" \
 	bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
 
-## smoke-qcow2: boot the fedbuild-derived qcow2 and run the same assertions
-## as `smoke` — proves the ADCON runtime consumption path (bastion-qemu
-## launches this format via GrpcQemuAdapter). Requires `make image` to have
-## emitted the qcow2.
-smoke-qcow2:
-	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make image first"; exit 1; }
-	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
-		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
-	SMOKE_FORMAT=qcow2 bash $(VARIANT_TESTS)/smoke.sh $(OUTDIR)
+## smoke-qcow2: alias for smoke — bastion-core smoke.sh always uses qcow2.
+smoke-qcow2: smoke
 
 ## baseline-record: append a row to $(BASELINES_CSV) from env vars
 ## Usage: BUILD_SECS=30 IMAGE_BYTES=1234567890 FIRSTBOOT_SECS=900 SECONDBOOT_SECS=5 make baseline-record
