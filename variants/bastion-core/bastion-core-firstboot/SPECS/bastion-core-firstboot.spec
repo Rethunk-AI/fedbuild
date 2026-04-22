@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.2.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -74,6 +74,10 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.3.0-1
+- chown service-ca tree to root:bastion after provision so bastion user can read certs.
+- Set chmod 750 on service-ca dir, 640 on certs/keys and issued/ subtree.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.2.0-1
 - Run bastion-provision at firstboot to create service-plane CA and issue all
   sidecar TLS leaf certs; fixes bastion-qemu.service 226/NAMESPACE failure.
