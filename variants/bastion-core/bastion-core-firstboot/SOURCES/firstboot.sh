@@ -65,7 +65,17 @@ if [[ ! -f "$PROVISION_JS" ]]; then
 fi
 log "Provisioning service-plane CA and sidecar TLS leaves …"
 mark "service-ca-start"
-node "$PROVISION_JS"
+# bastion-core dist is compiled with "module: NodeNext" — Node.js treats .js
+# as CJS by default and raises SyntaxError on the ESM import statements unless
+# a package.json{"type":"module"} exists in an ancestor of the script path.
+# The RPM does not install one; write it here so both the provision scripts
+# and the main server (dist/main.js) resolve as ESM.
+PKG_JSON_MARKER=/usr/lib64/bastion-core/package.json
+if [[ ! -f "$PKG_JSON_MARKER" ]]; then
+    printf '{"type":"module"}\n' > "$PKG_JSON_MARKER"
+    log "Wrote $PKG_JSON_MARKER (ESM marker for NodeNext dist)"
+fi
+node "$PROVISION_JS" 2>&1 | tee /dev/ttyS0
 log "Service-plane CA provisioned"
 mark "service-ca-done"
 

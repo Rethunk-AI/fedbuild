@@ -80,6 +80,12 @@ fi
 - Create /var/lib/bastion/qemu (ReadWritePaths dir required before exec).
 - Symlink ca.pem -> ca.crt in service-ca dir (Go binary references ca.pem).
 - Add bastion-qemu.service.d drop-in for After=bastion-core-firstboot.service.
+- Write {"type":"module"} to /usr/lib64/bastion-core/package.json before
+  invoking node; bastion-core dist compiled with module:NodeNext emits ESM
+  import statements that cause SyntaxError without the ESM marker. Proper fix
+  belongs in bastion-core.spec %install; this unblocks firstboot now.
+- Pipe node output through tee /dev/ttyS0 so provision errors are visible on
+  serial console without requiring SSH access post-failure.
 
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.0-1
 - Initial: PKI roll (BASTION_PKI_EPOCH_ROLL=1) at first boot; SAI stamp;
