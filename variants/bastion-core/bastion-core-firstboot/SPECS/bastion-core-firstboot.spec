@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -17,6 +17,7 @@ Requires:       bastion-core
 Source0:        firstboot.sh
 Source1:        bastion-core-firstboot.service
 Source2:        10-firstboot-ordering.conf
+Source3:        10-bastion-qemu-ordering.conf
 
 %description
 Runs once on first boot to roll the Bastion PKI (BASTION_PKI_EPOCH_ROLL=1)
@@ -25,15 +26,17 @@ image-baked defaults generated during package install at image build time.
 Generates a fresh SAI callsign + BASTION_WS_TOKEN and writes them to
 /var/lib/bastion/install/bootstrap.env.
 
-Also installs a systemd drop-in on bastion-core.service that adds
-After=bastion-core-firstboot.service so the C2 server never starts before
-the per-VM PKI is ready.
+Also installs systemd drop-ins on bastion-core.service and bastion-qemu.service
+that add After=bastion-core-firstboot.service so neither the C2 server nor the
+QEMU sidecar starts before the per-VM PKI is ready.
 
 %install
 install -Dm755 %{SOURCE0} %{buildroot}%{_libexecdir}/%{name}/firstboot.sh
 install -Dm644 %{SOURCE1} %{buildroot}%{_unitdir}/%{name}.service
 install -Dm644 %{SOURCE2} \
     %{buildroot}%{_unitdir}/bastion-core.service.d/10-firstboot-ordering.conf
+install -Dm644 %{SOURCE3} \
+    %{buildroot}%{_unitdir}/bastion-qemu.service.d/10-bastion-qemu-ordering.conf
 install -d %{buildroot}%{_localstatedir}/lib/bastion-core
 
 %check
@@ -66,9 +69,18 @@ fi
 %{_unitdir}/%{name}.service
 %dir %{_unitdir}/bastion-core.service.d
 %{_unitdir}/bastion-core.service.d/10-firstboot-ordering.conf
+%dir %{_unitdir}/bastion-qemu.service.d
+%{_unitdir}/bastion-qemu.service.d/10-bastion-qemu-ordering.conf
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.2.0-1
+- Run bastion-provision at firstboot to create service-plane CA and issue all
+  sidecar TLS leaf certs; fixes bastion-qemu.service 226/NAMESPACE failure.
+- Create /var/lib/bastion/qemu (ReadWritePaths dir required before exec).
+- Symlink ca.pem -> ca.crt in service-ca dir (Go binary references ca.pem).
+- Add bastion-qemu.service.d drop-in for After=bastion-core-firstboot.service.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.0-1
 - Initial: PKI roll (BASTION_PKI_EPOCH_ROLL=1) at first boot; SAI stamp;
   bastion-core.service drop-in for ordering.

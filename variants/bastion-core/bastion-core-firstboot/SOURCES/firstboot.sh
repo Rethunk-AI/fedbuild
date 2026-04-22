@@ -53,6 +53,29 @@ BASTION_PKI_EPOCH_ROLL=1 "$PACKAGE_INIT"
 log "PKI rolled"
 mark "pki-roll-done"
 
+# ── Provision service-plane CA and sidecar TLS leaves ───────────────────────
+# bastion-provision creates /var/lib/bastion/service-ca/{ca.crt,ca.key,
+# client.crt,client.key} and issues leaf certs to
+# /var/lib/bastion/service-ca/issued/<subject>/{cert.pem,key.pem} for every
+# sidecar subject. Must run before any sidecar service starts.
+PROVISION_JS=/usr/lib64/bastion-core/apps/server/dist/scripts/bastion-provision.js
+if [[ ! -f "$PROVISION_JS" ]]; then
+    log "ERROR: $PROVISION_JS not found — is bastion-core RPM installed?"
+    exit 1
+fi
+log "Provisioning service-plane CA and sidecar TLS leaves …"
+mark "service-ca-start"
+node "$PROVISION_JS"
+log "Service-plane CA provisioned"
+mark "service-ca-done"
+
+# bastion-qemu.service ReadWritePaths requires /var/lib/bastion/qemu at exec time.
+install -d -m 0750 /var/lib/bastion/qemu
+chown bastion-qemu:bastion-qemu /var/lib/bastion/qemu 2>/dev/null || true
+
+# bastion-qemu Go binary references ca.pem; service-ca-bootstrap creates ca.crt.
+ln -sf ca.crt /var/lib/bastion/service-ca/ca.pem
+
 # ── Read generated SAI ───────────────────────────────────────────────────────
 BOOTSTRAP_ENV=/var/lib/bastion/install/bootstrap.env
 if [[ ! -r "$BOOTSTRAP_ENV" ]]; then
