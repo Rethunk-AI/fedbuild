@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -74,6 +74,11 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.6.0-1
+- Generate BASTION_HOST_CREDENTIAL_AT_REST_KEY and write to /etc/bastion/bastion.env.
+- Add drop-in for bastion-credential-keystore.service fixing flag names:
+  RPM packaged -cert/-key instead of -tls-cert/-tls-key; binary exits 2/INVALIDARGUMENT.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.5.0-1
 - Create /var/log/bastion (root:bastion 0775) before services start;
   sidecar units declare ReadWritePaths=/var/log/bastion — missing dir

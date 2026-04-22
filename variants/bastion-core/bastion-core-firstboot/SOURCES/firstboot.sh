@@ -103,6 +103,33 @@ chown bastion-qemu:bastion-qemu /var/lib/bastion/qemu 2>/dev/null || true
 # bastion-qemu Go binary references ca.pem; service-ca-bootstrap creates ca.crt.
 ln -sf ca.crt /var/lib/bastion/service-ca/ca.pem
 
+# ── Generate at-rest encryption key for credential-keystore ─────────────────
+install -d -m 0755 /etc/bastion
+AT_REST_KEY=$(openssl rand -hex 32)
+printf 'BASTION_HOST_CREDENTIAL_AT_REST_KEY=%s\n' "$AT_REST_KEY" \
+    >> /etc/bastion/bastion.env
+chmod 0640 /etc/bastion/bastion.env
+chown root:bastion /etc/bastion/bastion.env
+log "Generated BASTION_HOST_CREDENTIAL_AT_REST_KEY"
+
+# ── Fix bastion-credential-keystore.service (RPM bug: wrong TLS flag names) ──
+# The packaged ExecStart uses -cert/-key (at-rest key name) instead of
+# -tls-cert/-tls-key, causing the binary to print usage and exit 2.
+SERVICE_CA=/var/lib/bastion/service-ca
+DROPIN_DIR=/etc/systemd/system/bastion-credential-keystore.service.d
+install -d -m 0755 "$DROPIN_DIR"
+cat > "$DROPIN_DIR/10-fix-flags.conf" <<DROPIN
+[Service]
+ExecStart=
+ExecStart=/usr/bin/bastion-credential-keystore \
+  -sock=/run/bastion/credential-keystore.sock \
+  -tls-cert=${SERVICE_CA}/issued/bastion-credential-keystore/cert.pem \
+  -tls-key=${SERVICE_CA}/issued/bastion-credential-keystore/key.pem \
+  -tls-ca=${SERVICE_CA}/ca.crt
+EnvironmentFile=/etc/bastion/bastion.env
+DROPIN
+systemctl daemon-reload
+
 # ── Read generated SAI ───────────────────────────────────────────────────────
 BOOTSTRAP_ENV=/var/lib/bastion/install/bootstrap.env
 if [[ ! -r "$BOOTSTRAP_ENV" ]]; then
