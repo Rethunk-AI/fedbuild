@@ -25,7 +25,6 @@ PrivateTmp=false
 # would block that. Run with full write access; the script itself is trusted.
 ProtectSystem=no
 ProtectHome=true
-ReadWritePaths=/var/lib/bastion /var/log/bastion /var/lib/bastion-core
 
 [Install]
 WantedBy=multi-user.target
