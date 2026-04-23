@@ -86,15 +86,16 @@ log "Service-plane CA provisioned"
 mark "service-ca-done"
 
 # Grant bastion user ownership of service-ca (created as root by provision).
-# read-service-ca.ts requires uid=gid=process or uid=gid=0; bastion:bastion satisfies
-# the former, root:bastion (mixed) satisfies neither.
+# Directories: 755 so bastion group members (non-bastion service accounts
+# carrying SupplementaryGroups=bastion) can traverse and reach their leaf certs.
+# Files: 640 (rw-r-----) — read-service-ca.ts enforces exactly 0600 or 0640;
+# 0644 is rejected with "invalid-mode". bastion group read (r) lets service
+# accounts with SupplementaryGroups=bastion read ca.crt, client.crt, leaf certs.
 chown -R bastion:bastion /var/lib/bastion/service-ca
-chmod 700 /var/lib/bastion/service-ca
+find /var/lib/bastion/service-ca -type d -exec chmod 755 {} +
 find /var/lib/bastion/service-ca -type f \
     \( -name '*.crt' -o -name '*.key' -o -name '*.pem' \) \
     -exec chmod 640 {} + 2>/dev/null || true
-find /var/lib/bastion/service-ca/issued -type d \
-    -exec chmod 700 {} + 2>/dev/null || true
 
 # bastion-qemu.service ReadWritePaths requires /var/lib/bastion/qemu at exec time.
 install -d -m 0750 /var/lib/bastion/qemu
@@ -115,7 +116,13 @@ log "Generated BASTION_HOST_CREDENTIAL_AT_REST_KEY"
 # ── Fix bastion-credential-keystore.service (RPM bug: wrong TLS flag names) ──
 # The packaged ExecStart uses -cert/-key (at-rest key name) instead of
 # -tls-cert/-tls-key, causing the binary to print usage and exit 2.
+# Also overrides -storage to a bastion-owned subdirectory — the default
+# /var/lib/bastion/host-credentials.enc.jsonl cannot be created by the bastion
+# user because /var/lib/bastion is root:root 755.
 SERVICE_CA=/var/lib/bastion/service-ca
+KEYSTORE_STORAGE_DIR=/var/lib/bastion/credential-keystore
+install -d -m 0750 "$KEYSTORE_STORAGE_DIR"
+chown bastion:bastion "$KEYSTORE_STORAGE_DIR"
 DROPIN_DIR=/etc/systemd/system/bastion-credential-keystore.service.d
 install -d -m 0755 "$DROPIN_DIR"
 cat > "$DROPIN_DIR/10-fix-flags.conf" <<DROPIN
@@ -123,12 +130,44 @@ cat > "$DROPIN_DIR/10-fix-flags.conf" <<DROPIN
 ExecStart=
 ExecStart=/usr/bin/bastion-credential-keystore \
   -sock=/run/bastion/credential-keystore.sock \
+  -storage=${KEYSTORE_STORAGE_DIR}/host-credentials.enc.jsonl \
   -tls-cert=${SERVICE_CA}/issued/bastion-credential-keystore/cert.pem \
   -tls-key=${SERVICE_CA}/issued/bastion-credential-keystore/key.pem \
   -tls-ca=${SERVICE_CA}/ca.crt
 EnvironmentFile=/etc/bastion/bastion.env
 DROPIN
 systemctl daemon-reload
+
+# ── Create sidecar state and config directories ──────────────────────────────
+# Services with ReadWritePaths or ReadOnlyPaths pointing at non-existent paths
+# fail systemd namespace setup with 226/NAMESPACE before their ExecStart runs.
+
+# bastion-ironlaw-loader
+#   ReadWritePaths=/var/lib/bastion/ironlaw-loader
+#   ReadOnlyPaths=/etc/bastion/ironlaw-loader
+install -d -m 0750 /var/lib/bastion/ironlaw-loader
+chown bastion-ironlaw-loader:bastion-ironlaw-loader /var/lib/bastion/ironlaw-loader 2>/dev/null || true
+install -d -m 0755 /etc/bastion/ironlaw-loader
+
+# bastion-intent-ledger-replicator
+#   ReadWritePaths=/var/lib/bastion/intent-ledger-replicator
+#   ReadOnlyPaths=/etc/bastion/intent-ledger-replicator
+install -d -m 0750 /var/lib/bastion/intent-ledger-replicator
+chown bastion-intent-ledger-replicator:bastion-intent-ledger-replicator /var/lib/bastion/intent-ledger-replicator 2>/dev/null || true
+install -d -m 0755 /etc/bastion/intent-ledger-replicator
+
+log "Created sidecar state directories"
+
+# ── Symlinks for Go sidecars expecting tls.crt / tls.key ────────────────────
+# bastion-provision emits cert.pem / key.pem; adcon-engine and adcon-mirror Go
+# binaries look for tls.crt / tls.key. Create relative symlinks to bridge.
+for subj in bastion-adcon-engine bastion-adcon-mirror; do
+    issued_dir=/var/lib/bastion/service-ca/issued/${subj}
+    [[ -d "$issued_dir" ]] || { log "WARN: $issued_dir missing — adcon provision may have failed"; continue; }
+    ln -sf cert.pem "${issued_dir}/tls.crt"
+    ln -sf key.pem  "${issued_dir}/tls.key"
+done
+log "Created tls.crt/tls.key symlinks for adcon sidecars"
 
 # ── Read generated SAI ───────────────────────────────────────────────────────
 BOOTSTRAP_ENV=/var/lib/bastion/install/bootstrap.env
