@@ -108,11 +108,13 @@ log "Generated BASTION_HOST_CREDENTIAL_AT_REST_KEY; set BASTION_TRUST_HEALTH_FRO
 
 # Pre-create images directory so bastion-qemu can read staged qcow2s
 # (bastion-edge.qcow2 → TheatreManager VMs, staged post-boot by operator).
-# Mode 0775 + bastion-operator in bastion-qemu group allows the operator to
-# scp images directly without sudo (make stage-tm-image target).
+# Also grant the operator the shared bastion group so they can read
+# root:bastion operator material like /etc/bastion/bastion.env without sudo.
+# Mode 0775 + group membership lets the operator stage images directly and
+# inspect the live Bastion WS token when driving the browser flow.
 install -d -m 0775 /var/lib/bastion/qemu/images
 chown bastion-qemu:bastion-qemu /var/lib/bastion/qemu/images 2>/dev/null || true
-usermod -aG bastion-qemu bastion-operator 2>/dev/null || true
+usermod -aG bastion,bastion-qemu bastion-operator 2>/dev/null || true
 
 systemctl daemon-reload
 
