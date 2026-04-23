@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.1.1
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -179,6 +179,12 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.2-1
+- Set BASTION_TRUST_HEALTH_FROM_GRPC=false in bastion.env to bypass failing pki-trust mTLS connection.
+- Add ReadWritePaths=/run/bastion drop-in for bastion-qemu (allows UDS socket bind/cleanup).
+- Create /var/lib/bastion/qemu/images/ (mode 0775, bastion-qemu group) for TheatreManager image staging.
+- Add bastion-operator to bastion-qemu group so scp can write images directly without sudo.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.1-1
 - Create /var/lib/bastion/ironlaw-loader and /etc/bastion/ironlaw-loader to prevent 226/NAMESPACE failure.
 - Create /var/lib/bastion/intent-ledger-replicator and /etc/bastion/intent-ledger-replicator.

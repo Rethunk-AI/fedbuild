@@ -109,9 +109,14 @@ install -d -m 0755 /etc/bastion
 AT_REST_KEY=$(openssl rand -hex 32)
 printf 'BASTION_HOST_CREDENTIAL_AT_REST_KEY=%s\n' "$AT_REST_KEY" \
     >> /etc/bastion/bastion.env
+# Opt out of bastion-pki-trust gRPC health so the session gate uses the
+# permissive no-origins path instead of criticalTrustHealthSnapshot().
+# bastion-pki-trust only supports -uds; the mTLS dial fails and the cache
+# stays empty, which would cause every session to see no_active_manifest.
+printf 'BASTION_TRUST_HEALTH_FROM_GRPC=false\n' >> /etc/bastion/bastion.env
 chmod 0640 /etc/bastion/bastion.env
 chown root:bastion /etc/bastion/bastion.env
-log "Generated BASTION_HOST_CREDENTIAL_AT_REST_KEY"
+log "Generated BASTION_HOST_CREDENTIAL_AT_REST_KEY; set BASTION_TRUST_HEALTH_FROM_GRPC=false"
 
 # ── Fix bastion-credential-keystore.service (RPM bug: wrong TLS flag names) ──
 # The packaged ExecStart uses -cert/-key (at-rest key name) instead of
@@ -136,6 +141,24 @@ ExecStart=/usr/bin/bastion-credential-keystore \
   -tls-ca=${SERVICE_CA}/ca.crt
 EnvironmentFile=/etc/bastion/bastion.env
 DROPIN
+systemctl daemon-reload
+
+# ── Fix bastion-qemu ReadWritePaths ──────────────────────────────────────────
+# bastion-qemu creates/removes /run/bastion/qemu.sock but the packaged unit
+# only lists ReadWritePaths=/var/lib/bastion/qemu ... not /run/bastion.
+# With ProtectSystem=strict the sock dir is read-only → ENOENT/EROFS on bind.
+install -d -m 0755 /etc/systemd/system/bastion-qemu.service.d
+printf '[Service]\nReadWritePaths=/run/bastion\n' \
+    > /etc/systemd/system/bastion-qemu.service.d/30-run-bastion.conf
+
+# Pre-create images directory so bastion-qemu can read staged qcow2s
+# (bastion-edge.qcow2 → TheatreManager VMs, staged post-boot by operator).
+# Mode 0775 + bastion-operator in bastion-qemu group allows the operator to
+# scp images directly without sudo (make stage-tm-image target).
+install -d -m 0775 /var/lib/bastion/qemu/images
+chown bastion-qemu:bastion-qemu /var/lib/bastion/qemu/images 2>/dev/null || true
+usermod -aG bastion-qemu bastion-operator 2>/dev/null || true
+
 systemctl daemon-reload
 
 # ── Create sidecar state and config directories ──────────────────────────────

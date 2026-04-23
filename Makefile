@@ -109,7 +109,7 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 	@test -f $(KEYFILE) || { echo "ERROR: keys/authorized_key not found"; exit 1; }
 	sed "s|ssh-ed25519 CHANGEME user@localhost|$$(cat $(KEYFILE))|" $(BLUEPRINT) > $(BLUEPRINT_EFFECTIVE)
 
-## image: build the variant's VM image (image-builder and chown require sudo nopasswd)
+## image: build the variant's VM image (image-builder requires sudo nopasswd)
 ## Produces both raw.zst (field-deploy; dd to media) and qcow2 (ADCON runtime;
 ## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
 ## convert so both formats descend from one reproducible image-builder output.
@@ -126,7 +126,6 @@ image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
 		$(PKG_IMAGE_FORMAT)
-	sudo chown -R "$${SUDO_UID:-$(shell id -u)}:$${SUDO_GID:-$(shell id -g)}" $(OUTDIR)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
 	@command -v qemu-img >/dev/null 2>&1 || { echo "ERROR: qemu-img not found — install qemu-utils / qemu-img"; exit 1; }
@@ -390,6 +389,19 @@ ssh-vm:
 	     -o StrictHostKeyChecking=no \
 	     -o UserKnownHostsFile=/dev/null \
 	     bastion-operator@localhost
+
+## stage-tm-image: copy bastion-edge qcow2 into the running bastion-core VM for TheatreManager provisioning
+## Requires: make VARIANT=bastion-edge image && make VARIANT=bastion-core run-vm
+stage-tm-image:
+	@KEY=$(OUTDIR)/run/ssh-key; \
+	 test -f "$$KEY" || { echo "ERROR: run: make VARIANT=bastion-core run-vm first"; exit 1; }; \
+	 SRC=$(CURDIR)/output/bastion-edge/fedora-43-minimal-raw-zst-x86_64.qcow2; \
+	 test -f "$$SRC" || { echo "ERROR: build bastion-edge first: make VARIANT=bastion-edge image"; exit 1; }; \
+	 echo "[stage-tm-image] Copying bastion-edge qcow2 to VM (may take a few minutes for 2.5 GB)..."; \
+	 scp -P $(VM_SSH_PORT) -i "$$KEY" \
+	     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+	     "$$SRC" bastion-operator@localhost:/var/lib/bastion/qemu/images/bastion-edge.qcow2; \
+	 echo "[stage-tm-image] Done — bastion-edge image staged"
 
 ## vm-status: show running state of the $(VARIANT) VM (PID, uptime, ports)
 vm-status:

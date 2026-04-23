@@ -1,6 +1,6 @@
 name = "fedora-43-bastion-core"
 description = "Fedora 43 minimal + Bastion C2 server stack (Tier 1+2 operator control plane)"
-version = "0.1.1"
+version = "0.1.2"
 distro = "fedora-43"
 
 # Bastion core VM: Fedora 43 minimal runtime hosting the full Bastion server
