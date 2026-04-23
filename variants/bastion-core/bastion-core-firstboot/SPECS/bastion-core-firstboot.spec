@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.1.3
+Version:        0.1.4
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -179,6 +179,9 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.4-1
+- Load br_netfilter module at boot via modules-load.d so bridge-nf-call-iptables sysctl exists when bastion-qemu starts network preflight.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.3-1
 - Enable net.ipv4.ip_forward=1 via sysctl.d so bastion-qemu passes network preflight.
 

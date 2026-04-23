@@ -1,6 +1,6 @@
 name = "fedora-43-bastion-core"
 description = "Fedora 43 minimal + Bastion C2 server stack (Tier 1+2 operator control plane)"
-version = "0.1.3"
+version = "0.1.4"
 distro = "fedora-43"
 
 # Bastion core VM: Fedora 43 minimal runtime hosting the full Bastion server
@@ -123,6 +123,13 @@ minsize = 42949672960
 path = "/etc/sysctl.d/99-bastion-forwarding.conf"
 mode = "0644"
 data = "net.ipv4.ip_forward = 1\nnet.ipv6.conf.all.forwarding = 1\n"
+
+# Load br_netfilter at boot so /proc/sys/net/bridge/bridge-nf-call-iptables
+# exists when bastion-qemu starts its network preflight check.
+[[customizations.files]]
+path = "/etc/modules-load.d/bastion-bridge.conf"
+mode = "0644"
+data = "br_netfilter\n"
 
 # Harden SSHD: key-only auth, no root login, no X11.
 [[customizations.files]]
