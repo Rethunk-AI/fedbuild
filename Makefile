@@ -401,6 +401,11 @@ stage-tm-image:
 	 scp -P $(VM_SSH_PORT) -i "$$KEY" \
 	     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 	     "$$SRC" bastion-operator@localhost:/var/lib/bastion/qemu/images/bastion-edge.qcow2; \
+	 ssh -p $(VM_SSH_PORT) -i "$$KEY" \
+	     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+	     bastion-operator@localhost \
+	     "chgrp bastion-qemu /var/lib/bastion/qemu/images/bastion-edge.qcow2 && \
+	      chmod 0640 /var/lib/bastion/qemu/images/bastion-edge.qcow2"; \
 	 echo "[stage-tm-image] Done — bastion-edge image staged"
 
 ## vm-status: show running state of the $(VARIANT) VM (PID, uptime, ports)

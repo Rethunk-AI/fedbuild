@@ -1,6 +1,6 @@
 name = "fedora-43-bastion-core"
 description = "Fedora 43 minimal + Bastion C2 server stack (Tier 1+2 operator control plane)"
-version = "0.1.4"
+version = "0.1.7"
 distro = "fedora-43"
 
 # Bastion core VM: Fedora 43 minimal runtime hosting the full Bastion server
@@ -42,12 +42,17 @@ packages = [
     # KVM to function. bastion-qemu uses CAP_NET_ADMIN + TAP interfaces
     # directly — libvirt is not required.
     { name = "qemu-kvm",               version = "*" },
+    # qemu-img: QCOW2 validation and overlay creation helper used by bastion-qemu.
+    { name = "qemu-img",               version = "*" },
     # nftables: VM-to-VM isolation rules applied by bastion-qemu at startup
     { name = "nftables",               version = "*" },
     # iproute: `ip` command for bridge and TAP interface management
     { name = "iproute",                version = "*" },
     # bridge-utils: `brctl` used by bastion-qemu bridge setup
     { name = "bridge-utils",           version = "*" },
+    # genisoimage: fallback cloud-init ISO builder used by bastion-qemu when
+    # cloud-localds is not present in the runtime image.
+    { name = "genisoimage",            version = "*" },
 
     # --- Bastion C2 server packages (operator-supplied via extra-rpms/) ---
     # Build order: see scripts/build-extra-rpms.sh
