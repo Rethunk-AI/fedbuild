@@ -147,6 +147,13 @@ fi
 # shellcheck source=/dev/null
 source "$BOOTSTRAP_ENV"
 
+if ! grep -q '^BASTION_WS_TOKEN=' /etc/bastion/bastion.env 2>/dev/null; then
+    printf 'BASTION_WS_TOKEN=%s\n' "$BASTION_WS_TOKEN" >> /etc/bastion/bastion.env
+    chmod 0640 /etc/bastion/bastion.env
+    chown root:bastion /etc/bastion/bastion.env
+    log "Mirrored BASTION_WS_TOKEN into /etc/bastion/bastion.env for operator access"
+fi
+
 SAI_CALLSIGN="${BASTION_SAI_CALLSIGN:-UNKNOWN}"
 log "SAI callsign: $SAI_CALLSIGN"
 printf '%s\n' "$SAI_CALLSIGN" > "${SENTINEL_DIR}/core-id"
