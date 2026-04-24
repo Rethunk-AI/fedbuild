@@ -131,8 +131,8 @@ data = "PasswordAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUs
 
 # dnf5-automatic: security-only updates, apply immediately, no reboot.
 # Overrides /etc/dnf/dnf5-plugins/automatic.conf shipped by dnf5-plugin-automatic.
-# F43 migrated from dnf4 dnf-automatic (legacy path /etc/dnf/automatic.conf) to
-# dnf5; unit name is dnf5-automatic.timer, not dnf-automatic-install.timer.
+# F43 writes dnf5 automatic-update config to /etc/dnf/dnf5-plugins/automatic.conf;
+# the active timer is dnf5-automatic.timer.
 [[customizations.files]]
 path = "/etc/dnf/dnf5-plugins/automatic.conf"
 mode = "0644"
