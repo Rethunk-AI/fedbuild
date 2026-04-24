@@ -14,6 +14,48 @@ make publish-mirror                        # stage qcow2 + SBOM + provenance for
 
 `make help` lists every target. `make variants` lists known variants. Full reference + gotchas in **[AGENTS.md](AGENTS.md)**.
 
+## VM lifecycle
+
+Use the standardized lifecycle entrypoint:
+
+```bash
+../vm.sh up                             # default local stack: bastion-core + bastion-edge + /workspace theatre
+../vm.sh status                         # stack status and access summary
+../vm.sh ssh                            # SSH to bastion-core
+../vm.sh down                           # stop the stack
+../vm.sh destroy                        # destroy stack run state
+
+../vm.sh up --variant bastion-core      # single-VM escape hatch
+../vm.sh status --variant bastion-core
+../vm.sh ssh --variant bastion-core
+```
+
+Equivalent `make` targets exist via `make run-vm`, `make stop-vm`, `make destroy-vm`,
+ `make vm-status`, and `make ssh-vm`. Those `make` runtime targets still target
+ a single VM via `VM_VARIANT` (default `bastion-core`); use the no-arg
+ `../vm.sh` actions when you want the full local stack.
+
+- `up` defaults to a **fresh** `output/<variant>/run/` state. Set `VM_REUSE_STATE=1`
+  (or pass `--reuse-state`) only when you intentionally want to keep the prior
+  overlay and firmware vars.
+- For the default stack, `up` boots `bastion-core` and `bastion-edge`, enrolls
+  the TheatreManager into Core, creates or reuses a Theatre at `/workspace`,
+  captures the regenerated Core bootstrap identity into
+  `output/bastion-core/run/bootstrap.env`, and prints the Bastion URL,
+  WebSocket URL, WS token, TheatreManager, Theatre, SSH entrypoints, and serial
+  log paths in the terminal summary.
+- For single-VM `--variant bastion-core`, `up` still captures the regenerated
+  bootstrap identity (`BASTION_SAI_*`, `BASTION_WS_TOKEN`) into
+  `output/bastion-core/run/bootstrap.env` after firstboot completes, and prints
+  the Bastion URL plus WS token in the terminal summary.
+- For `devbox`, `up` prepares a Bastion dev bootstrap env at
+  `~/.config/bastion/bootstrap.env` inside the VM, mirrors it to
+  `output/devbox/run/bootstrap.env`, and prints the WS token plus bootstrap-env
+  guidance in the terminal summary. If you manually start Bastion inside the VM,
+  rerunning `up` also prints the local tunnel details.
+- `devbox` uses the SSH key baked from `keys/authorized_key`; set `VM_SSH_KEY=/path/to/private-key`
+  if the script cannot infer the matching private key automatically.
+
 ## Multiple variants
 
 fedbuild builds multiple Fedora 43 image variants from one repo. The default `devbox` variant builds a Bastion Agent sandbox; other variants (e.g. `bastion-edge`) live as siblings under `variants/`. Pick one via `VARIANT=`:

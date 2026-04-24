@@ -105,7 +105,7 @@ VARIANT_TESTS    := $(VARIANT_DIR)/tests
 # Pull variant-specific vars
 -include $(VARIANT_DIR)/variant.mk
 
-# Derived paths (all variant-scoped; no legacy root-level per-variant state)
+# Derived paths (all variant-scoped; no root-level per-variant state)
 REPODIR    := $(FEDBUILD)/repo/$(VARIANT)
 OUTDIR     := $(FEDBUILD)/output/$(VARIANT)
 SPECFILE   := $(VARIANT_DIR)/$(PKG_NAME)/SPECS/$(PKG_NAME).spec

@@ -20,6 +20,12 @@ make smoke                                            # KVM boot + assertion swe
 
 `VARIANT=devbox` is the default for every `make` target — explicit `VARIANT=devbox` is allowed but redundant.
 
+`../vm.sh up` also prepares a reusable Bastion dev bootstrap env under
+`~/.config/bastion/bootstrap.env` inside the VM, mirrors it to
+`output/devbox/run/bootstrap.env`, and prints the WS token plus bootstrap-env
+guidance in the host-side summary. If Bastion is already running manually
+inside the VM, rerunning `up` also prints the local tunnel command.
+
 ## Inputs
 
 - `blueprint.toml` — package list + image customisations (osbuild blueprint format)

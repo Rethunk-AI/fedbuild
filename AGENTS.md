@@ -43,6 +43,11 @@ make shellcheck       # shellcheck this variant's SOURCES/*.sh + tests/*.sh
 make lint             # rpmlint on built RPM
 make validate         # check blueprint syntax, SSH key substitution, image-builder target
 make smoke            # boot VM (KVM) and run variant-specific smoke (variants/<variant>/tests/smoke.sh)
+make run-vm           # single-VM umbrella-root convenience target — defaults to VM_VARIANT=bastion-core
+make stop-vm          # stop the umbrella-root managed VM
+make destroy-vm       # stop + delete output/<variant>/run
+make vm-status        # show VM state via the umbrella-root manager
+make ssh-vm           # SSH via the umbrella-root manager
 make smoke-rerun      # re-run smoke against existing image (idempotency)
 make diff-packages    # blueprint-declared RPMs vs rpm -qa on a running VM
 make sign             # cosign keyless-sign $(OUTDIR)/SHA256SUMS
@@ -62,6 +67,8 @@ make bump-major       # bump X, reset Y=0, Z=0
 make install-hooks    # install pre-commit hooks
 make changelog        # git-cliff regenerate CHANGELOG.md from Conventional Commits
 make help             # list available targets
+../vm.sh up                          # canonical local stack entrypoint (core + edge + /workspace theatre)
+../vm.sh up --variant bastion-core   # single-VM escape hatch
 ```
 
 ## Architecture

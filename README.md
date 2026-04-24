@@ -30,6 +30,30 @@ make VARIANT=bastion-edge && make VARIANT=bastion-edge image && make VARIANT=bas
 
 `make variants` lists all available variants. `make help` lists all targets.
 
+Persistent VM lifecycle is standardized under the umbrella-root **`vm.sh`**
+script. From `fedbuild/`, run `../vm.sh <up|down|destroy|status|ssh>`.
+
+- No-arg `../vm.sh up` now boots the local Bastion stack: `bastion-core`,
+  `bastion-edge`, automatic TheatreManager enrollment into Core, and a Theatre
+  rooted at `/workspace`.
+- No-arg `../vm.sh status` prints the operator-ready summary: Bastion URL,
+  WebSocket URL, `BASTION_WS_TOKEN`, TheatreManager, Theatre, SSH entrypoints,
+  bootstrap path, and serial logs.
+- `../vm.sh ssh` still defaults to `bastion-core`.
+- Use `--variant <name>` when you intentionally want a single VM instead of the
+  full stack.
+
+Single-VM `bastion-core` still captures the regenerated bootstrap identity in
+`output/bastion-core/run/bootstrap.env` and prints the Bastion URL plus
+`BASTION_WS_TOKEN` in the terminal summary. `devbox` still prepares a reusable
+Bastion dev bootstrap env and prints the WS token plus bootstrap-env guidance;
+if Bastion is already running manually inside the VM, rerunning `up` also
+prints the local tunnel details.
+
+`make run-vm` remains a single-VM convenience target: it passes an explicit
+`VM_VARIANT` (default `bastion-core`) into `vm.sh`, so use no-arg `../vm.sh`
+when you want the full stack.
+
 ## Documentation
 
 | Doc | Audience |

@@ -79,5 +79,5 @@ If you want all of the above, build `VARIANT=devbox` instead.
 ## Related
 
 - Spec: [`specs/active/multi-variant-refactor/spec.md`](../../specs/active/multi-variant-refactor/spec.md) (F6)
-- Downstream consumer: Bastion meta-repo `specs/active/packaging-vm-retirement/` — retires the legacy qcow2-overlay harness in favour of this image
+- Downstream consumer: Bastion meta-repo `specs/active/packaging-vm-retirement/` — replaces the qcow2-overlay harness with this image flow
 - TheatreManager docs: [`bastion-edge` repo `AGENTS.md`](https://github.com/Rethunk-Tech/bastion-edge/blob/main/AGENTS.md)
