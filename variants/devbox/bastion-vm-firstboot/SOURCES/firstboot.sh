@@ -10,19 +10,22 @@ set -euo pipefail
 
 SENTINEL_DIR=/var/lib/bastion-vm-firstboot
 BREW_INSTALLER=""
-log() { echo "[firstboot] $(date -Iseconds) $*"; }
+SERIAL=/dev/ttyS0
+serial() { [[ -w "$SERIAL" ]] && printf '%s\n' "$*" > "$SERIAL" 2>/dev/null || true; }
+log() { echo "[firstboot] $(date -Iseconds) $*"; serial "[firstboot] $*"; }
 
 # ── Serial-console marker protocol ────────────────────────────────────────────
 # Structured lines consumed by tests/smoke.sh via the QEMU serial log.
-# StandardOutput=journal+console on the unit routes stdout to ttyS0, so these
-# hit the captured serial log directly — no SSH round-trip needed to diagnose
-# firstboot progress or failure.
+# systemd's `StandardOutput=journal+console` is not reliable for host-side QEMU
+# serial capture on Fedora once tty ownership shifts to serial-getty, so write
+# the smoke protocol directly to /dev/ttyS0 when present. The same messages
+# still land in the journal via stdout below.
 #   FEDBUILD_MARK: <event>        — lifecycle/section events
 #   FEDBUILD_TOOL: <name>=<ver>   — one per tool at end-of-run
 #   FEDBUILD_READY                — terminal success marker
 #   FEDBUILD_FAILED <rc>          — terminal failure marker (written from trap)
 # Keep the prefix rare and exact-match; smoke greps anchored lines only.
-mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; }
+mark() { printf 'FEDBUILD_MARK: %s\n' "$*"; serial "FEDBUILD_MARK: $*"; }
 
 # ── Timing instrumentation ────────────────────────────────────────────────────
 # Per-section SECONDS deltas; summary printed at end for journal-grep friendliness.
@@ -65,6 +68,7 @@ on_exit() {
         touch "${SENTINEL_DIR}/failed" 2>/dev/null || true
         # Terminal marker — smoke greps this to fail-fast instead of timing out.
         printf 'FEDBUILD_FAILED %d\n' "$rc"
+        serial "FEDBUILD_FAILED $rc"
     fi
 }
 trap on_exit EXIT
@@ -300,17 +304,21 @@ tool_version() { command -v "$1" >/dev/null 2>&1 && "$@" 2>/dev/null | head -1 |
 # `<missing>` rather than <error>. One line per tool, stable ordering, so
 # smoke.sh can parse via awk '/^FEDBUILD_TOOL:/' without SSH round-trips.
 emit_tool() {
-    local label="$1" cmd="$2" bin head="$2" ver
+    local label="$1" cmd="$2" bin head="$2" ver line
     # Strip leading VAR=value env prefixes (may chain), first remaining token is the binary.
     # Mirrors smoke.sh log_version parsing so labels stay aligned.
     while [[ "$head" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do head="${head#* }"; done
     bin=${head%% *}
     if ! command -v "$bin" >/dev/null 2>&1; then
-        printf 'FEDBUILD_TOOL: %s=<missing>\n' "$label"
+        line=$(printf 'FEDBUILD_TOOL: %s=<missing>' "$label")
+        printf '%s\n' "$line"
+        serial "$line"
         return
     fi
     ver=$(eval "$cmd" 2>&1 | awk 'NF{print;exit}') || ver="<error>"
-    printf 'FEDBUILD_TOOL: %s=%s\n' "$label" "${ver:-<empty>}"
+    line=$(printf 'FEDBUILD_TOOL: %s=%s' "$label" "${ver:-<empty>}")
+    printf '%s\n' "$line"
+    serial "$line"
 }
 mark "tools-begin"
 emit_tool claude     'claude --version'
@@ -341,3 +349,4 @@ sudo chmod 0644 /var/log/fedbuild-ready.json
 log "Done"
 # Terminal success marker — emit LAST so smoke's serial-grep sees tools + JSON first.
 printf 'FEDBUILD_READY\n'
+serial "FEDBUILD_READY"

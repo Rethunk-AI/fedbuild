@@ -2,9 +2,9 @@
 # bastion-core-firstboot — runs once on first boot as root.
 #
 # Purpose:
-#   1. Roll the PKI (BASTION_PKI_EPOCH_ROLL=1) so each VM gets unique
-#      cryptographic identity rather than the image-baked defaults generated
-#      during RPM %post at image build time.
+#   1. Force-regenerate the Bastion bootstrap bundle and roll the autogen PKI
+#      so each VM gets unique cryptographic identity rather than the image-baked
+#      defaults generated during RPM %post at image build time.
 #   2. Source /var/lib/bastion/install/bootstrap.env and record the per-VM SAI
 #      callsign in /var/lib/bastion-core/core-id.
 #   3. Write /etc/bastion-core-release (consumed by smoke + operators).
@@ -44,19 +44,20 @@ chmod 0775 /var/log/bastion
 
 # ── Roll PKI — generate unique SAI + service-ca per VM ──────────────────────
 # bastion-package-init ran during RPM %post (image build time) and already
-# populated /var/lib/bastion/install/bootstrap.env with a default SAI.
-# BASTION_PKI_EPOCH_ROLL=1 forces regeneration so every booted VM gets a
-# unique callsign, BASTION_WS_TOKEN, and PKI leaf set.
+# populated /var/lib/bastion/install/bootstrap.env with a default SAI/token.
+# `--force` rotates that bootstrap bundle, while BASTION_PKI_EPOCH_ROLL=1
+# clears the autogen gRPC TLS material so every fresh VM boot gets a unique
+# callsign, BASTION_WS_TOKEN, and PKI leaf set.
 PACKAGE_INIT=/usr/libexec/bastion-core/bastion-package-init
 if [[ ! -x "$PACKAGE_INIT" ]]; then
     log "ERROR: $PACKAGE_INIT not found — is bastion-core RPM installed?"
     exit 1
 fi
 
-log "Rolling PKI (BASTION_PKI_EPOCH_ROLL=1) …"
+log "Regenerating bootstrap identity and rolling PKI …"
 mark "pki-roll-start"
-BASTION_PKI_EPOCH_ROLL=1 "$PACKAGE_INIT"
-log "PKI rolled"
+BASTION_PKI_EPOCH_ROLL=1 "$PACKAGE_INIT" --force
+log "Bootstrap identity and PKI rolled"
 mark "pki-roll-done"
 
 # ── Provision service-plane CA and sidecar TLS leaves ───────────────────────
@@ -147,12 +148,27 @@ fi
 # shellcheck source=/dev/null
 source "$BOOTSTRAP_ENV"
 
-if ! grep -q '^BASTION_WS_TOKEN=' /etc/bastion/bastion.env 2>/dev/null; then
-    printf 'BASTION_WS_TOKEN=%s\n' "$BASTION_WS_TOKEN" >> /etc/bastion/bastion.env
-    chmod 0640 /etc/bastion/bastion.env
-    chown root:bastion /etc/bastion/bastion.env
-    log "Mirrored BASTION_WS_TOKEN into /etc/bastion/bastion.env for operator access"
-fi
+sync_bootstrap_identity_env() {
+    local tmp filtered
+    tmp=$(mktemp)
+    filtered="${tmp}.filtered"
+    if [[ -f /etc/bastion/bastion.env ]]; then
+        grep -vE '^(BASTION_SAI_CALLSIGN|BASTION_SAI_FINGERPRINT|BASTION_SAI_PUBLIC_KEY|BASTION_WS_TOKEN)=' \
+            /etc/bastion/bastion.env > "$tmp" || true
+    fi
+    {
+        cat "$tmp"
+        printf 'BASTION_SAI_CALLSIGN=%s\n' "$BASTION_SAI_CALLSIGN"
+        printf 'BASTION_SAI_FINGERPRINT=%s\n' "$BASTION_SAI_FINGERPRINT"
+        printf 'BASTION_SAI_PUBLIC_KEY=%s\n' "$BASTION_SAI_PUBLIC_KEY"
+        printf 'BASTION_WS_TOKEN=%s\n' "$BASTION_WS_TOKEN"
+    } > "$filtered"
+    install -m 0640 -o root -g bastion "$filtered" /etc/bastion/bastion.env
+    rm -f "$tmp" "$filtered"
+}
+
+sync_bootstrap_identity_env
+log "Synced bootstrap identity into /etc/bastion/bastion.env for operator access"
 
 SAI_CALLSIGN="${BASTION_SAI_CALLSIGN:-UNKNOWN}"
 log "SAI callsign: $SAI_CALLSIGN"

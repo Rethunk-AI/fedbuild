@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := repo
-.PHONY: all deps rpm repo image publish-mirror smoke smoke-qcow2 run-vm stop-vm ssh-vm vm-status clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants build-extra-rpms check-extra-rpms
+.PHONY: all deps rpm repo image publish-mirror smoke smoke-qcow2 run-vm stop-vm destroy-vm ssh-vm vm-status clean distclean help check check-versions check-versions-all check-settings check-size bless-size bless-boot-time diff-packages lint shellcheck validate sign verify bump-patch bump-minor bump-major install-hooks changelog sbom attest baseline-record smoke-rerun check-boot-time cve-scan brew-drift variants build-extra-rpms check-extra-rpms
 
 # ── Variant dispatch ──────────────────────────────────────────────────────────
 # `make` (no arg) defaults to the devbox variant. Override with VARIANT=<name>.
@@ -249,7 +249,7 @@ variants:
 ## shellcheck: lint shell scripts in this variant + repo-root scripts
 shellcheck:
 	@scripts=""; \
-	 for s in $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh $(VARIANT_TESTS)/smoke.sh $(VARIANT_TESTS)/smoke-rerun.sh $(VARIANT_TESTS)/run-vm.sh $(VARIANT_TESTS)/stop-vm.sh $(VARIANT_TESTS)/diff-packages.sh $(VARIANT_TESTS)/brew-drift.sh; do \
+	 for s in $(FEDBUILD)/../vm.sh $(SRCDIR)/firstboot.sh $(SRCDIR)/devbox-profile.sh $(VARIANT_TESTS)/smoke.sh $(VARIANT_TESTS)/smoke-rerun.sh $(VARIANT_TESTS)/diff-packages.sh $(VARIANT_TESTS)/brew-drift.sh; do \
 	   [ -f $$s ] && scripts="$$scripts $$s"; \
 	 done; \
 	 if [ -n "$$scripts" ]; then shellcheck $$scripts; else echo "shellcheck: no scripts to check for VARIANT=$(VARIANT)"; fi
@@ -363,38 +363,50 @@ smoke:
 ## smoke-qcow2: alias for smoke — bastion-core smoke.sh always uses qcow2.
 smoke-qcow2: smoke
 
-## run-vm: launch a persistent $(VARIANT) VM (CoW overlay; state survives stop/start)
-## Forwards: SSH→$(VM_SSH_PORT), web→$(VM_WEB_PORT), ws→$(VM_WS_PORT). Use stop-vm to halt.
-VM_SSH_PORT ?= 2224
-VM_WEB_PORT ?= 4173
-VM_WS_PORT  ?= 8765
+## run-vm: launch the umbrella-root VM manager for $(VM_VARIANT)
+## Fresh by default (new run/ state + new bastion-core bootstrap identity). Set VM_REUSE_STATE=1 to resume.
+## Runtime default is bastion-core; override with VM_VARIANT=<name> for other images.
+VM_VARIANT ?= bastion-core
+VM_OUTDIR  ?= $(FEDBUILD)/output/$(VM_VARIANT)
+VM_SSH_PORT ?= $(if $(filter $(VM_VARIANT),bastion-core),2224,$(if $(filter $(VM_VARIANT),bastion-edge),2232,2222))
+VM_WEB_PORT ?= $(if $(filter $(VM_VARIANT),bastion-core),4173,)
+VM_WS_PORT  ?= $(if $(filter $(VM_VARIANT),bastion-core),8765,)
+VM_SCRIPT   := $(FEDBUILD)/../vm.sh
 run-vm:
-	@test -d $(OUTDIR) || { echo "ERROR: $(OUTDIR) not found — run: make VARIANT=$(VARIANT) image"; exit 1; }
-	@command -v qemu-system-x86_64 >/dev/null 2>&1 || \
-		{ echo "ERROR: qemu-system-x86_64 not found — install qemu-kvm"; exit 1; }
+	@VARIANT="$(VM_VARIANT)" \
+	OUTDIR="$(VM_OUTDIR)" \
 	VM_SSH_PORT="$(VM_SSH_PORT)" \
 	VM_WEB_PORT="$(VM_WEB_PORT)" \
 	VM_WS_PORT="$(VM_WS_PORT)" \
-	bash $(VARIANT_TESTS)/run-vm.sh $(OUTDIR)
+	VM_SSH_KEY="$(VM_SSH_KEY)" \
+	VM_REUSE_STATE="$(VM_REUSE_STATE)" \
+	VM_BUILD_IF_MISSING="$(VM_BUILD_IF_MISSING)" \
+	TIMEOUT_SSH="$(TIMEOUT_SSH)" \
+	TIMEOUT_FIRSTBOOT="$(TIMEOUT_FIRSTBOOT)" \
+	SERIAL_TAIL="$(SERIAL_TAIL)" \
+	bash $(VM_SCRIPT) up
 
-## stop-vm: gracefully stop the persistent $(VARIANT) VM started by run-vm
+## stop-vm: gracefully stop $(VM_VARIANT) through the umbrella-root VM manager
 stop-vm:
-	@bash $(VARIANT_TESTS)/stop-vm.sh $(OUTDIR)
+	@VARIANT="$(VM_VARIANT)" OUTDIR="$(VM_OUTDIR)" bash $(VM_SCRIPT) down
 
-## ssh-vm: open an SSH session to the running $(VARIANT) VM
+## destroy-vm: stop $(VM_VARIANT) and delete output/<variant>/run through the umbrella-root VM manager
+destroy-vm:
+	@VARIANT="$(VM_VARIANT)" OUTDIR="$(VM_OUTDIR)" bash $(VM_SCRIPT) destroy
+
+## ssh-vm: open an SSH session to the running $(VM_VARIANT) VM through the umbrella-root VM manager
 ssh-vm:
-	@KEY=$(OUTDIR)/run/ssh-key; \
-	 test -f "$$KEY" || { echo "ERROR: $$KEY not found — run: make VARIANT=$(VARIANT) run-vm first"; exit 1; }; \
-	 ssh -i "$$KEY" -p $(VM_SSH_PORT) \
-	     -o StrictHostKeyChecking=no \
-	     -o UserKnownHostsFile=/dev/null \
-	     bastion-operator@localhost
+	@VARIANT="$(VM_VARIANT)" \
+	OUTDIR="$(VM_OUTDIR)" \
+	VM_SSH_PORT="$(VM_SSH_PORT)" \
+	VM_SSH_KEY="$(VM_SSH_KEY)" \
+	bash $(VM_SCRIPT) ssh
 
 ## stage-tm-image: copy bastion-edge qcow2 into the running bastion-core VM for TheatreManager provisioning
-## Requires: make VARIANT=bastion-edge image && make VARIANT=bastion-core run-vm
+## Requires: make VARIANT=bastion-edge image && make run-vm
 stage-tm-image:
-	@KEY=$(OUTDIR)/run/ssh-key; \
-	 test -f "$$KEY" || { echo "ERROR: run: make VARIANT=bastion-core run-vm first"; exit 1; }; \
+	@KEY=$(VM_OUTDIR)/run/ssh-key; \
+	 test -f "$$KEY" || { echo "ERROR: run: make run-vm first"; exit 1; }; \
 	 SRC=$(CURDIR)/output/bastion-edge/fedora-43-minimal-raw-zst-x86_64.qcow2; \
 	 test -f "$$SRC" || { echo "ERROR: build bastion-edge first: make VARIANT=bastion-edge image"; exit 1; }; \
 	 echo "[stage-tm-image] Copying bastion-edge qcow2 to VM (may take a few minutes for 2.5 GB)..."; \
@@ -408,23 +420,15 @@ stage-tm-image:
 	      chmod 0640 /var/lib/bastion/qemu/images/bastion-edge.qcow2"; \
 	 echo "[stage-tm-image] Done — bastion-edge image staged"
 
-## vm-status: show running state of the $(VARIANT) VM (PID, uptime, ports)
+## vm-status: show running state of $(VM_VARIANT) through the umbrella-root VM manager
 vm-status:
-	@PID_FILE=$(OUTDIR)/run/qemu.pid; \
-	 if [ ! -f "$$PID_FILE" ]; then \
-	     echo "$(VARIANT): not running (no PID file)"; exit 0; \
-	 fi; \
-	 PID=$$(cat "$$PID_FILE"); \
-	 if kill -0 "$$PID" 2>/dev/null; then \
-	     echo "$(VARIANT): RUNNING (PID $$PID)"; \
-	     ps -p "$$PID" -o pid,etime,vsz --no-headers 2>/dev/null | \
-	         awk '{printf "  PID=%s  uptime=%s  vsz=%s KiB\n", $$1, $$2, $$3}'; \
-	     echo "  SSH:    ssh -i $(OUTDIR)/run/ssh-key -p $(VM_SSH_PORT) bastion-operator@localhost"; \
-	     echo "  Web UI: http://localhost:$(VM_WEB_PORT)"; \
-	     echo "  WS:     ws://localhost:$(VM_WS_PORT)"; \
-	 else \
-	     echo "$(VARIANT): stale PID file ($$PID not running)"; \
-	 fi
+	@VARIANT="$(VM_VARIANT)" \
+	OUTDIR="$(VM_OUTDIR)" \
+	VM_SSH_PORT="$(VM_SSH_PORT)" \
+	VM_WEB_PORT="$(VM_WEB_PORT)" \
+	VM_WS_PORT="$(VM_WS_PORT)" \
+	VM_SSH_KEY="$(VM_SSH_KEY)" \
+	bash $(VM_SCRIPT) status
 
 ## baseline-record: append a row to $(BASELINES_CSV) from env vars
 ## Usage: BUILD_SECS=30 IMAGE_BYTES=1234567890 FIRSTBOOT_SECS=900 SECONDBOOT_SECS=5 make baseline-record
