@@ -32,10 +32,9 @@ packages = [
     { name = "openssl",                version = "*" },
 
     # --- AppArmor + SELinux policy tooling ---
-    # apparmor: apparmor_parser (profile load) + aa-status (smoke K9/K11)
-    # (Fedora package is "apparmor", not "apparmor-utils" which is Debian/Ubuntu)
     # selinux-policy-devel: checkmodule + semodule_package (compile verification K10)
-    { name = "apparmor",                version = "*" },
+    # AppArmor tooling is absent from Fedora 43 repos; profile + unit ship in the
+    # bastion-theatre RPM but are no-ops on Fedora (ConditionSecurity=apparmor).
     { name = "selinux-policy-devel",    version = "*" },
 
     # --- Bastion edge packages (operator-supplied via extra-rpms/) ---
