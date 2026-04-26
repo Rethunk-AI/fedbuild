@@ -63,12 +63,10 @@ build_sidecar() {
   mkdir -p "${RPMBUILD_ROOT}"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
   local SRC_DIR="${WORK_DIR}/${name}-${VERSION}"
-  (cd "$repo_path" && cp -a . "${SRC_DIR}/")
+  # Refresh vendor/ in the repo (local replace paths are live here, ../bastion-common etc.).
+  (cd "$repo_path" && GOWORK=off go mod vendor)
 
-  # Ensure vendor/ is present and up to date (local replace paths are live here).
-  if [[ ! -d "${SRC_DIR}/vendor" ]]; then
-    (cd "${SRC_DIR}" && GOWORK=off go mod vendor)
-  fi
+  (cd "$repo_path" && cp -a . "${SRC_DIR}/")
 
   tar -C "${WORK_DIR}" -czf \
       "${RPMBUILD_ROOT}/SOURCES/${name}-${VERSION}.tar.gz" \
