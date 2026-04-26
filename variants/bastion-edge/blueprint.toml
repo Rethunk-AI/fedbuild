@@ -32,9 +32,10 @@ packages = [
     { name = "openssl",                version = "*" },
 
     # --- AppArmor + SELinux policy tooling ---
-    # apparmor-utils: apparmor_parser (profile load) + aa-status (smoke K9/K11)
+    # apparmor: apparmor_parser (profile load) + aa-status (smoke K9/K11)
+    # (Fedora package is "apparmor", not "apparmor-utils" which is Debian/Ubuntu)
     # selinux-policy-devel: checkmodule + semodule_package (compile verification K10)
-    { name = "apparmor-utils",          version = "*" },
+    { name = "apparmor",                version = "*" },
     { name = "selinux-policy-devel",    version = "*" },
 
     # --- Bastion edge packages (operator-supplied via extra-rpms/) ---
