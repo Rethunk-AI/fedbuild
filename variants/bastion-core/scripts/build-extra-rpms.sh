@@ -47,10 +47,13 @@ build_sidecar() {
   fi
   echo "Building ${name} …"
   rm -f "${EXTRA_RPMS}/${name}-"*.rpm
-  GOWORK=off \
-  BASTION_RPM_VERSION="${VERSION}" \
-  BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
-    "${repo_path}/packaging/rpm/build-rpm.sh"
+  (
+    cd "$repo_path"
+    GOWORK=off \
+    BASTION_RPM_VERSION="${VERSION}" \
+    BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
+      "${repo_path}/packaging/rpm/build-rpm.sh"
+  )
 }
 
 # ── bastion-core (Node.js, different build flow) ─────────────────────────────
