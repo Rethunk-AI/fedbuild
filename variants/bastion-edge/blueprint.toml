@@ -56,7 +56,8 @@ groups = ["wheel"]
 [customizations.services]
 enabled = [
     "sshd",
-    "bastion-theatre-apparmor",
+    # bastion-theatre-apparmor is enabled by bastion-theatre RPM %post on install;
+    # do not list it here — osbuild errors if the unit is absent from the image.
     "bastion-theatre-manager",
     "bastion-edge-firstboot",
     "dnf5-automatic.timer",
