@@ -41,19 +41,52 @@ GO_SIDECARS=(
 build_sidecar() {
   local name="$1"
   local repo_path="${META_ROOT}/${name}"
-  if [[ ! -d "$repo_path/packaging/rpm" ]]; then
+  local spec_dir="${repo_path}/packaging/rpm"
+  if [[ ! -d "$spec_dir" ]]; then
     echo "SKIP: ${name} — no packaging/rpm/ dir" >&2
     return 0
   fi
   echo "Building ${name} …"
   rm -f "${EXTRA_RPMS}/${name}-"*.rpm
-  (
-    cd "$repo_path"
-    GOWORK=off \
-    BASTION_RPM_VERSION="${VERSION}" \
-    BASTION_RPM_OUT_DIR="${EXTRA_RPMS}" \
-      "${repo_path}/packaging/rpm/build-rpm.sh"
-  )
+
+  # Build inline rather than via the sidecar's build-rpm.sh so we can keep the
+  # vendor/ directory in the source tarball.  The sidecar build-rpm.sh strips
+  # vendor/ and then relies on GOPROXY to re-fetch modules, but bastion-common
+  # and other local-replace siblings are not publishable to proxy.golang.org.
+  # Keeping vendor/ lets rpmbuild satisfy all imports offline.
+  local WORK_DIR
+  WORK_DIR="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '${WORK_DIR}'" RETURN
+
+  local RPMBUILD_ROOT="${WORK_DIR}/rpmbuild"
+  mkdir -p "${RPMBUILD_ROOT}"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+
+  local SRC_DIR="${WORK_DIR}/${name}-${VERSION}"
+  (cd "$repo_path" && cp -a . "${SRC_DIR}/")
+
+  # Ensure vendor/ is present and up to date (local replace paths are live here).
+  if [[ ! -d "${SRC_DIR}/vendor" ]]; then
+    (cd "${SRC_DIR}" && GOWORK=off go mod vendor)
+  fi
+
+  tar -C "${WORK_DIR}" -czf \
+      "${RPMBUILD_ROOT}/SOURCES/${name}-${VERSION}.tar.gz" \
+      "${name}-${VERSION}"
+
+  cp "${spec_dir}/${name}.spec" "${RPMBUILD_ROOT}/SPECS/"
+  for f in "${name}.service" "${name}.sysusers"; do
+    [[ -f "${spec_dir}/${f}" ]] && cp "${spec_dir}/${f}" "${RPMBUILD_ROOT}/SOURCES/" || true
+  done
+
+  GOWORK=off \
+    rpmbuild -bb \
+    --define "_topdir ${RPMBUILD_ROOT}" \
+    --define "rpm_version ${VERSION}" \
+    --define "rpm_release 1" \
+    "${RPMBUILD_ROOT}/SPECS/${name}.spec"
+
+  find "${RPMBUILD_ROOT}/RPMS" -name "${name}-*.rpm" -exec cp {} "${EXTRA_RPMS}/" \;
 }
 
 # ── bastion-core (Node.js, different build flow) ─────────────────────────────
