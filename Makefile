@@ -119,12 +119,14 @@ image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	     echo "ERROR: $(VARIANT) VM is running (PID $$(cat $$pid_file)) — run: make VARIANT=$(VARIANT) stop-vm"; exit 1; \
 	 fi
 	mkdir -p $(OUTDIR)
+	mkdir -p $(OUTDIR)/.image-builder-cache
 	image-builder build              \
 		--distro     fedora-43            \
 		--blueprint  $(BLUEPRINT_EFFECTIVE) \
 		--extra-repo file://$(REPODIR)    \
 		$(EXTRA_REPOS)                    \
 		--output-dir $(OUTDIR)            \
+		--cache      $(OUTDIR)/.image-builder-cache \
 		$(PKG_IMAGE_FORMAT)
 	cp -v $(RPM) $(OUTDIR)/
 	@command -v zstd >/dev/null 2>&1 || { echo "ERROR: zstd not found — required for qcow2 derivation"; exit 1; }
