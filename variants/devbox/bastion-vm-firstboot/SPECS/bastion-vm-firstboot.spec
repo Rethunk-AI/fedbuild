@@ -47,7 +47,7 @@ install -d %{buildroot}%{_localstatedir}/lib/%{name}
 install -Dm644 %{SOURCE4} %{buildroot}%{_datadir}/%{name}/agent-claude.md
 install -Dm644 %{SOURCE5} %{buildroot}%{_datadir}/%{name}/agent-settings.json
 install -Dm644 %{SOURCE6} %{buildroot}%{_datadir}/%{name}/Brewfile
-install -Dm640 %{SOURCE7} %{buildroot}%{_sysconfdir}/audit/rules.d/99-fedbuild.rules
+install -Dm644 %{SOURCE7} %{buildroot}%{_sysconfdir}/audit/rules.d/99-fedbuild.rules
 
 %check
 # Lint shell sources at rpmbuild time — failures fail the build.
@@ -87,10 +87,13 @@ fi
 %{_datadir}/%{name}/agent-claude.md
 %{_datadir}/%{name}/agent-settings.json
 %{_datadir}/%{name}/Brewfile
-%ghost %{_sysconfdir}/fedbuild-release
-%attr(0640,root,root) %{_sysconfdir}/audit/rules.d/99-fedbuild.rules
+%ghost %attr(0644,root,root) %{_sysconfdir}/fedbuild-release
+%attr(0644,root,root) %{_sysconfdir}/audit/rules.d/99-fedbuild.rules
 
 %changelog
+* Sun Apr 26 2026 Damon Blais <damon.blais@gmail.com> - 0.6.1-1
+- Package audit rules world-readable and align changelog with the RPM version.
+
 * Fri Apr 17 2026 Damon Blais <damon.blais@gmail.com> - 0.6.0-1
 - SBOM generation via syft (CycloneDX + SPDX) — make sbom
 - SLSA v1 provenance attestation via cosign — make attest
