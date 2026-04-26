@@ -1,5 +1,5 @@
 Name:           bastion-core-firstboot
-Version:        0.1.5
+Version:        0.1.7
 Release:        1%{?dist}
 Summary:        First-boot PKI roll and SAI generation for Bastion core VM
 License:        MIT
@@ -113,6 +113,9 @@ fi
 %ghost %attr(0644,root,root) %{_sysconfdir}/bastion-core-release
 
 %changelog
+* Sun Apr 26 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.7-1
+- Align firstboot package version with bastion-core blueprint.
+
 * Wed Apr 22 2026 Bastion Agent <bastion-agent@rethunk.tech> - 0.1.5-1
 - Remove all workaround drop-ins now fixed in source RPMs (0.1.1): Type=exec for
   bastion-qemu, correct TLS flag names for credential-keystore, cert.pem/key.pem
