@@ -31,6 +31,12 @@ packages = [
     { name = "nodejs",                 version = "*" },
     { name = "openssl",                version = "*" },
 
+    # --- AppArmor + SELinux policy tooling ---
+    # apparmor-utils: apparmor_parser (profile load) + aa-status (smoke K9/K11)
+    # selinux-policy-devel: checkmodule + semodule_package (compile verification K10)
+    { name = "apparmor-utils",          version = "*" },
+    { name = "selinux-policy-devel",    version = "*" },
+
     # --- Bastion edge packages (operator-supplied via extra-rpms/) ---
     { name = "bastion-theatre",         version = "*" },
     { name = "bastion-theatre-manager", version = "*" },
@@ -50,6 +56,7 @@ groups = ["wheel"]
 [customizations.services]
 enabled = [
     "sshd",
+    "bastion-theatre-apparmor",
     "bastion-theatre-manager",
     "bastion-edge-firstboot",
     "dnf5-automatic.timer",
