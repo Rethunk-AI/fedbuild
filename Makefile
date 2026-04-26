@@ -109,7 +109,7 @@ $(BLUEPRINT_EFFECTIVE): $(BLUEPRINT) $(KEYFILE)
 	@test -f $(KEYFILE) || { echo "ERROR: keys/authorized_key not found"; exit 1; }
 	sed "s|ssh-ed25519 CHANGEME user@localhost|$$(cat $(KEYFILE))|" $(BLUEPRINT) > $(BLUEPRINT_EFFECTIVE)
 
-## image: build the variant's VM image (image-builder requires sudo nopasswd)
+## image: build the variant's VM image
 ## Produces both raw.zst (field-deploy; dd to media) and qcow2 (ADCON runtime;
 ## consumed by bastion-qemu). qcow2 is derived from the raw.zst via qemu-img
 ## convert so both formats descend from one reproducible image-builder output.
@@ -119,7 +119,7 @@ image: check-extra-rpms $(REPO_MARKER) $(BLUEPRINT_EFFECTIVE)
 	     echo "ERROR: $(VARIANT) VM is running (PID $$(cat $$pid_file)) — run: make VARIANT=$(VARIANT) stop-vm"; exit 1; \
 	 fi
 	mkdir -p $(OUTDIR)
-	sudo image-builder build              \
+	image-builder build              \
 		--distro     fedora-43            \
 		--blueprint  $(BLUEPRINT_EFFECTIVE) \
 		--extra-repo file://$(REPODIR)    \
