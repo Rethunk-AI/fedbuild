@@ -158,7 +158,7 @@ data = "datasource_list: [ NoCloud, None ]\n"
 [[customizations.files]]
 path = "/etc/sudoers.d/bastion-operator-smoke"
 mode = "0440"
-data = "bastion-operator ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/poweroff, /usr/sbin/ausearch, /usr/bin/systemctl status *\n"
+data = "bastion-operator ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/poweroff, /usr/sbin/ausearch, /usr/bin/systemctl status *, /usr/bin/systemctl kill *, /usr/bin/systemctl reload *\n"
 
 # Enable nested virt for bastion-qemu: load kvm-amd (or kvm-intel) module at
 # boot. The `nested=1` option is already the Fedora default for kvm-amd; this
