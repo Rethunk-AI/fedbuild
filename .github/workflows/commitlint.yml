@@ -12,12 +12,12 @@ jobs:
     name: Conventional Commits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v4
         with:
           # commitlint needs the full PR range to lint every commit.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6.4.0
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
