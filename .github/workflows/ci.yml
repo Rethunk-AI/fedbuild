@@ -24,7 +24,7 @@ jobs:
       image: fedora:43
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Compute cache week
         id: week
@@ -76,7 +76,7 @@ jobs:
     container:
       image: fedora:43
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install minimal deps
         run: dnf install -y --setopt=install_weak_deps=False make yq
       - name: check-versions-all
