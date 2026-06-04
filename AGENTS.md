@@ -10,6 +10,7 @@ Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox wi
 |---------|---------|----------|
 | `devbox` | Bastion Agent (Claude Code, Gemini CLI) sandbox — Homebrew + dev toolchain | `make` (default) |
 | `bastion-edge` | Field-deployable image with `bastion-theatre-manager` daemon pre-enabled (Fedora 43 minimal, no Homebrew, no dev tools) | `make VARIANT=bastion-edge image` |
+| `bastion-core` | Fedora 43 minimal + full Bastion C2 server stack (Node.js server, React UI, ten Go sidecars; nested KVM required for TheatreManager VMs) | `make VARIANT=bastion-core image` |
 
 See [`README.md`](README.md) § Variants for the same table in operator-facing docs. Per-variant inputs and smoke details live in `variants/<name>/README.md`.
 
