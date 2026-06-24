@@ -24,14 +24,14 @@ jobs:
       image: fedora:43
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Compute cache week
         id: week
         run: echo "key=$(date +%Y-%W)" >> "$GITHUB_OUTPUT"
 
       - name: Cache dnf packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /var/cache/dnf
           key: dnf-f43-${{ steps.week.outputs.key }}-${{ hashFiles('.github/workflows/ci.yml', 'variants/*/blueprint.toml', 'variants/*/*-firstboot/SPECS/*.spec') }}
@@ -76,7 +76,7 @@ jobs:
     container:
       image: fedora:43
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install minimal deps
         run: dnf install -y --setopt=install_weak_deps=False make yq
       - name: check-versions-all
