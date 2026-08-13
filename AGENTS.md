@@ -7,7 +7,7 @@ Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox wi
 ## Variants
 
 | Variant | Purpose | Built by |
-|---------|---------|----------|
+| --------- | --------- | ---------- |
 | `devbox` | Bastion Agent (Claude Code, Gemini CLI) sandbox — Homebrew + dev toolchain | `make` (default) |
 | `bastion-edge` | Field-deployable image with `bastion-theatre-manager` daemon pre-enabled (Fedora 43 minimal, no Homebrew, no dev tools) | `make VARIANT=bastion-edge image` |
 | `bastion-core` | Fedora 43 minimal + full Bastion C2 server stack (Node.js server, React UI, ten Go sidecars; nested KVM required for TheatreManager VMs) | `make VARIANT=bastion-core image` |
@@ -108,6 +108,7 @@ fedbuild/
 ## Variant anatomy (extended)
 
 Each `variants/<name>/variant.mk` declares:
+
 - `PKG_NAME` — name of the firstboot RPM produced for this variant (must match the spec `Name:`)
 - `PKG_BLUEPRINT_NAME` — name field in the variant's `blueprint.toml`
 - `PKG_IMAGE_FORMAT` — image-builder output format (e.g. `minimal-raw-zst`)
@@ -115,11 +116,11 @@ Each `variants/<name>/variant.mk` declares:
 
 The root Makefile errors out if `variants/$(VARIANT)/variant.mk` is missing, so a typo in `VARIANT=` fails fast.
 
-`extra-rpms/` is the pickup point for upstream-built RPMs. Example: the `bastion-edge` variant consumes two version-matched RPMs from the [bastion-edge source repo](https://github.com/Rethunk-Tech/bastion-edge) — `bastion-theatre` (Node payload) + `bastion-theatre-manager` (daemon) — produced via `yarn release:rpm:theatre` + `yarn release:rpm:theatre-manager`. Drop them in, optionally pin sha256s in `EXPECTED_SHA256`, then `make image`.
+`extra-rpms/` is the pickup point for upstream-built RPMs. Example: the `bastion-edge` variant consumes two version-matched RPMs from the [bastion-edge source repo](https://github.com/Rethunk-Tech/bastion-edge) — `bastion-theatre` (Node payload) + `bastion-theatre-manager` (daemon) — produced via `bun run release:rpm:theatre` + `bun run release:rpm:theatre-manager`. Drop them in, optionally pin sha256s in `EXPECTED_SHA256`, then `make image`.
 
 ## Blueprint Format (non-obvious)
 
-osbuild blueprint TOML — reference: https://osbuild.org/docs/user-guide/blueprint-reference/
+osbuild blueprint TOML — reference: <https://osbuild.org/docs/user-guide/blueprint-reference/>
 
 - All packages use `version = "*"` — always-update policy, no pins anywhere
 - `[[customizations.user]]` array-of-tables syntax required (dotted key + table header = invalid TOML)
@@ -130,6 +131,7 @@ osbuild blueprint TOML — reference: https://osbuild.org/docs/user-guide/bluepr
 ## Git Identity
 
 Image bakes `/etc/gitconfig` via `[[customizations.files]]`:
+
 - `user.name = Bastion Agent`
 - `user.email = bastion-agent@rethunk.tech`
 
@@ -169,6 +171,7 @@ Agent can override per-repo: `git config user.name / user.email`
 **Why it can't work:** rpmbuild bakes the absolute `_sourcedir` path into the captured `%install` scriptlet that is stored in the SRPM header. That header is then hashed into the binary RPM's `Sourcesigmd5`, which is hashed into `Sha1header` and `Sha256header`. Net effect: changing the SOURCES path (whether by `git mv` or by cloning the repo to a different directory) cascades into different RPM bytes, even when SDE, git SHA, `_buildhost`, payload content, and SOURCES mtimes are all identical.
 
 **Concrete evidence captured:**
+
 - Pre-refactor (`bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `9473bc9f144af4af3b5c7d0f3f363e2ea5102d93a8445d266bb5be519afafa45`
 - Post-refactor (`variants/devbox/bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `085c67f310e284e2049ded8d01750dbebeef7a0119fe8fcaa9117a7112f95203`
 - Binary RPM payload (cpio) sha256: **identical** in both — `5b4bdd3b25b0c9200d034fb1a0862decfd9d92d1ec61cc56b2f23ab9d9a8b2dd`
@@ -177,15 +180,18 @@ Agent can override per-repo: `git config user.name / user.email`
 - `strings rpm | grep _sourcedir-path` showed the captured `%install` script with absolute paths
 
 **What this means in practice:**
+
 - Two developers cloning fedbuild to different paths (`/home/alice/fedbuild` vs `/home/bob/fedbuild`) will always produce different RPM bytes. This is normal for RPM and not a fedbuild bug.
 - A renamed-in-place file move (this refactor) shifts the path the same way and produces the same kind of difference.
 - Cosign signs the SHA256SUMS of artifact bytes, so the signature is path-dependent too. Re-sign per build.
 
 **What IS guaranteed (the actual reproducibility property):**
+
 - Same tree, same git SHA, same SDE, same `_sourcedir` → same RPM bytes across rebuilds. Verified.
 - Payload content is path-independent (the cpio archive of installed files doesn't depend on `_sourcedir`).
 
 **Anti-patterns to avoid in future fedbuild work:**
+
 - Don't gate refactors on cross-tree RPM byte-identity. Use rebuild-determinism instead (`make rpm; sha256sum; make clean; make rpm; sha256sum; diff`).
 - Don't chase mtime normalization (`touch -d "@$SDE"` on SOURCES) hoping it'll close the gap — `clamp_mtime_to_source_date_epoch 1` already handles installed-file mtimes; the SRPM's path embedding is what differs and `touch` can't fix that.
 - Don't compare RPMs built from different filesystem locations (`/var/tmp/foo` vs `/home/x/foo`) and expect equality. The `_topdir` and `_sourcedir` are baked in.
@@ -195,6 +201,7 @@ Agent can override per-repo: `git config user.name / user.email`
 ## CI
 
 `.github/workflows/ci.yml` runs on push/PR to `main` in `fedora:43` container:
+
 - shellcheck (all `SOURCES/*.sh`)
 - rpmlint (built RPM)
 - actionlint (pinned v1.7.7)

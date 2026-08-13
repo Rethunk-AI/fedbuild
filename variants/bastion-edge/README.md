@@ -5,7 +5,7 @@ Field-deployable Bastion edge image — Fedora 43 minimal + `bastion-theatre-man
 ## Output
 
 | Artifact | What it is |
-|---|---|
+| --- | --- |
 | `bastion-edge-firstboot-X.Y.Z-1.fc43.noarch.rpm` | Tiny firstboot unit: stamps `/var/lib/bastion-edge/edge-id` from cidata or `/etc/machine-id`, then exits. Built by fedbuild. |
 | `fedora-43-bastion-edge-X.Y.Z-*.x86_64.raw.zst` | Bootable image with `bastion-theatre` + `bastion-theatre-manager` + firstboot baked, `bastion-theatre-manager.service` enabled. |
 
@@ -20,8 +20,8 @@ Produce them from the [`bastion-edge` repo](https://github.com/Rethunk-Tech/bast
 
 ```bash
 cd ~/src/bastion-edge
-yarn release:rpm:theatre            # → packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre-*.rpm
-yarn release:rpm:theatre-manager    # → packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre-manager-*.rpm
+bun run release:rpm:theatre            # → packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre-*.rpm
+bun run release:rpm:theatre-manager    # → packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre-manager-*.rpm
 
 cp packaging/rpm/rpmbuild/RPMS/x86_64/bastion-theatre{,-manager}-*.rpm \
    ~/fedbuild/variants/bastion-edge/extra-rpms/
@@ -71,7 +71,7 @@ By design:
 
 - **No Homebrew** — edge images are hardened appliances, not dev sandboxes
 - **No AI CLIs** (Claude, Gemini) — agent code lives on the development variant (`devbox`), not on the edge
-- **No corepack / yarn global** — TheatreManager bundles its Node payload
+- **No Bun global** — TheatreManager bundles its Node payload
 - **No VS Code / cloudflared repos** — strictly upstream Fedora + local fedbuild repo
 
 If you want all of the above, build `VARIANT=devbox` instead.
