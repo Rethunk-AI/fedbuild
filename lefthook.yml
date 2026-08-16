@@ -1,0 +1,39 @@
+# Git hooks, mirroring CI's `make check`.
+#
+# The tools are invoked directly rather than pinned per hook: shellcheck,
+# actionlint, check-jsonschema and yq are the same binaries CI and `make check`
+# use, so there is one version of each to keep current instead of a second set
+# of revisions that drifts quietly out of step.
+#
+# Globs match `variants/<variant>/...`, which is where this repository actually
+# keeps its sources. Paths are matched against the staged files rather than
+# assumed, because a path filter that matches nothing is indistinguishable from
+# a hook that passes.
+#
+# Enable with `make install-hooks`. Hooks are not committed by git, so this
+# file is the decision and that target is what applies it.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: shellcheck
+      glob: "*.sh"
+      run: shellcheck {staged_files}
+
+    - name: actionlint
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint
+
+    - name: agent-settings schema
+      glob: "**/agent-settings.json"
+      run: check-jsonschema --schemafile schemas/agent-settings.schema.json {staged_files}
+
+    # Compares the spec against the blueprint, so it needs both sides and takes
+    # no file list of its own.
+    - name: spec/blueprint version parity
+      glob: "{**/blueprint.toml,**/*.spec}"
+      run: make check-versions
+
+    - name: blueprint.toml syntax
+      glob: "**/blueprint.toml"
+      run: yq -p toml -oy "." {staged_files} > /dev/null

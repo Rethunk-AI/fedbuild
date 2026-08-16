@@ -537,11 +537,11 @@ changelog:
 	git-cliff --config $(FEDBUILD)/cliff.toml --output $(FEDBUILD)/CHANGELOG.md
 	@echo "Regenerated CHANGELOG.md"
 
-## install-hooks: install pre-commit hooks from .pre-commit-config.yaml
+## install-hooks: install the git hooks defined in lefthook.yml
 install-hooks:
-	@command -v pre-commit >/dev/null 2>&1 || \
-		{ echo "ERROR: pre-commit not found — pip install pre-commit"; exit 1; }
-	pre-commit install
+	@command -v lefthook >/dev/null 2>&1 || \
+		{ echo "ERROR: lefthook not found — uv tool install lefthook"; exit 1; }
+	lefthook install
 	@echo "Installed → .git/hooks/pre-commit"
 
 ## help: list available targets

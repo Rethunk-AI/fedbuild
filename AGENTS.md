@@ -65,7 +65,7 @@ make deps             # install createrepo_c (sudo)
 make bump-patch       # bump Z in X.Y.Z for $(VARIANT) — spec + blueprint lockstep
 make bump-minor       # bump Y, reset Z=0
 make bump-major       # bump X, reset Y=0, Z=0
-make install-hooks    # install pre-commit hooks
+make install-hooks    # install the git hooks
 make changelog        # git-cliff regenerate CHANGELOG.md from Conventional Commits
 make help             # list available targets
 ../vm.sh up                          # canonical local stack entrypoint (core + edge + /workspace theatre)
