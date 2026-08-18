@@ -147,7 +147,7 @@ Agent can override per-repo: `git config user.name / user.email`
 - Failure sentinel: `/var/lib/bastion-vm-firstboot/failed` — written on non-zero exit; check `journalctl -u bastion-vm-firstboot` for root cause
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
-- `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
+- `CLAUDE.md` and `GEMINI.md` are `@AGENTS.md` pointers — edit `AGENTS.md` only
 - RPM builds reproducible *within a single tree* (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across rebuilds in the same `_sourcedir`). **Cross-tree byte-identity is not achievable — see § Reproducibility scope below.**
 - Image size budget enforced by `make check-size` against `variants/<variant>/tests/size.baseline` (run `make bless-size` after intentional size changes)
 - Brew formulae list lives in `SOURCES/Brewfile` (consumed by `brew bundle` in firstboot) — do not hardcode brew packages in `firstboot.sh`
