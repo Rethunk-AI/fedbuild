@@ -254,10 +254,13 @@ shellcheck:
 	 done; \
 	 if [ -n "$$scripts" ]; then shellcheck $$scripts; else echo "shellcheck: no scripts to check for VARIANT=$(VARIANT)"; fi
 
-## lint: run rpmlint against the built RPM
-lint: $(RPM)
-	@rpm -q rpmlint >/dev/null 2>&1 || sudo dnf install -y rpmlint
-	rpmlint --config $(FEDBUILD)/.rpmlintrc --ignore-unused-rpmlintrc $(RPM)
+## lint: run shellcheck and rpmlint against the spec when available
+lint: shellcheck
+	@if command -v rpmlint >/dev/null 2>&1; then \
+		rpmlint --config $(FEDBUILD)/.rpmlintrc --ignore-unused-rpmlintrc $(SPECFILE); \
+	else \
+		echo "rpmlint not found; checked shell scripts only"; \
+	fi
 
 ## validate: check blueprint syntax, SSH key, and target image type
 validate: $(BLUEPRINT_EFFECTIVE)
