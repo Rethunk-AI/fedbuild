@@ -1,6 +1,6 @@
 # fedbuild
 
-Builds reproducible Fedora 43 VM images for Bastion. **Multi-variant** since 2026-04-17 (`refactor(variants)` commit `22681d5`). One repo, one pipeline, multiple shipping artifacts driven by `make VARIANT=<name>`.
+Builds reproducible Fedora 43 VM images for Bastion. **Multi-variant**: one repo, one pipeline, multiple shipping artifacts driven by `make VARIANT=<name>`.
 
 Default variant: `devbox` — Bastion Agent (Claude Code, Gemini CLI) sandbox with Homebrew + dev toolchain. Other variants (e.g. `bastion-edge`) live as sibling subdirectories under `variants/`.
 
@@ -148,36 +148,32 @@ Agent can override per-repo: `git config user.name / user.email`
 - RPM version/release auto-derived from spec via `sed` in Makefile — edit spec, not Makefile
 - blueprint `version` field is semver string, bump it on each change for traceability
 - `CLAUDE.md` is a symlink to `AGENTS.md` — never write to `CLAUDE.md` directly; edit `AGENTS.md`
-- RPM builds reproducible *within a single tree* (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across rebuilds in the same `_sourcedir`). **Cross-tree byte-identity is not achievable — see § Reproducibility scope (BDA) below.**
-- Image size budget enforced by `make check-size` against `tests/size.baseline` (run `make bless-size` after intentional size changes)
+- RPM builds reproducible *within a single tree* (`SOURCE_DATE_EPOCH` = commit ctime; byte-identical across rebuilds in the same `_sourcedir`). **Cross-tree byte-identity is not achievable — see § Reproducibility scope below.**
+- Image size budget enforced by `make check-size` against `variants/<variant>/tests/size.baseline` (run `make bless-size` after intentional size changes)
 - Brew formulae list lives in `SOURCES/Brewfile` (consumed by `brew bundle` in firstboot) — do not hardcode brew packages in `firstboot.sh`
 - `make smoke` requires KVM, `qemu-system-x86_64`, `zstd`, and a built image in `output/`
 - smoke failures: if SSH came up, firstboot journal is captured to `$OUTDIR/smoke-fail.log` (override via `FAIL_LOG=...`)
-- `tests/baselines.csv` records per-commit build/boot timing; commit it alongside `tests/size.baseline` after blessing
+- `variants/<variant>/tests/baselines.csv` records per-commit build/boot timing; commit it alongside `variants/<variant>/tests/size.baseline` after blessing
 - `Brewfile.lock.json` dumped post-firstboot is a record of what installed, NOT a pin — next boot re-resolves `latest`
 - `auditd` root-exec rule covers euid=0 only; firstboot/brew/agent activity (as `user`) is not audited
 - SLSA provenance (`make attest`) is Build L1 — no hardened builder; authenticates artifact identity, not build isolation
 - Git SSH signing: firstboot generates per-VM ed25519 key at `~user/.ssh/id_ed25519_signing`, sets `gpg.format=ssh`+`commit.gpgsign=true`+`tag.gpgsign=true` in user-level gitconfig, and appends pubkey to `~user/.ssh/allowed_signers`. `git log --show-signature` verifies locally. Collaborators need the pubkey in their own allowed_signers to verify remotely.
 - `agent-settings.json` is schemaVersion-pinned (currently 1). Bump both `schemaVersion` in the JSON and the filename fragment in `schemas/agent-settings.v1.schema.json` together on incompatible revisions.
-- `tests/cve-allowlist.yaml` is grype's native config; entries require rationale + owner + review date. `make cve-scan` fails on any critical CVE not listed.
-- `tests/brew-drift.sh OLD NEW` diffs two `brew-versions.txt` snapshots (firstboot emits `/var/lib/bastion-vm-firstboot/brew-versions.txt` alongside `Brewfile.lock.json`).
+- `variants/devbox/tests/cve-allowlist.yaml` is grype's native config; entries require rationale + owner + review date. `make cve-scan` fails on any critical CVE not listed.
+- `variants/devbox/tests/brew-drift.sh` diffs two `brew-versions.txt` snapshots (firstboot emits `/var/lib/bastion-vm-firstboot/brew-versions.txt` alongside `Brewfile.lock.json`).
 
-## Reproducibility scope (BDA — 2026-04-17)
+## Reproducibility scope
 
-**One-line rule:** fedbuild guarantees *same-tree determinism*, not *cross-tree byte-identity*. Don't chase the latter.
+**One-line rule:** fedbuild guarantees *same-tree determinism*, not *cross-tree byte-identity*. Do not chase the latter.
 
-**What was tried and failed:** During the `multi-variant-refactor` spec execution, an attempt was made to verify that moving `bastion-vm-firstboot/` into `variants/devbox/bastion-vm-firstboot/` produced a byte-identical RPM (same SHA256). It did not — and that was the correct outcome, but only obvious in hindsight.
+**Why cross-tree RPM bytes differ:** rpmbuild bakes the absolute `_sourcedir` path into the captured `%install` scriptlet stored in the SRPM header. That header is hashed into the binary RPM's `Sourcesigmd5`, which feeds `Sha1header` and `Sha256header`. Changing the SOURCES path — whether by `git mv` or cloning the repo to a different directory — changes RPM header hashes even when SDE, git SHA, `_buildhost`, payload content, and SOURCES mtimes are identical.
 
-**Why it can't work:** rpmbuild bakes the absolute `_sourcedir` path into the captured `%install` scriptlet that is stored in the SRPM header. That header is then hashed into the binary RPM's `Sourcesigmd5`, which is hashed into `Sha1header` and `Sha256header`. Net effect: changing the SOURCES path (whether by `git mv` or by cloning the repo to a different directory) cascades into different RPM bytes, even when SDE, git SHA, `_buildhost`, payload content, and SOURCES mtimes are all identical.
+**Evidence that payload content is path-independent:**
 
-**Concrete evidence captured:**
-
-- Pre-refactor (`bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `9473bc9f144af4af3b5c7d0f3f363e2ea5102d93a8445d266bb5be519afafa45`
-- Post-refactor (`variants/devbox/bastion-vm-firstboot/SOURCES/`, SDE=1776424334): SHA256 `085c67f310e284e2049ded8d01750dbebeef7a0119fe8fcaa9117a7112f95203`
-- Binary RPM payload (cpio) sha256: **identical** in both — `5b4bdd3b25b0c9200d034fb1a0862decfd9d92d1ec61cc56b2f23ab9d9a8b2dd`
-- SRPM payload (cpio) sha256: **identical** in both — `b595095720d73b99f74ab269985271caf5230d34f81734098beea9bfc45cbb42`
-- The only divergent header tags: `Sigmd5`, `Sha1header`, `Sha256header`, `Sourcesigmd5` — all derived hashes
-- `strings rpm | grep _sourcedir-path` showed the captured `%install` script with absolute paths
+- Binary RPM payload (cpio) sha256 stays identical when only `_sourcedir` moves.
+- SRPM payload (cpio) sha256 stays identical under the same condition.
+- Only divergent header tags: `Sigmd5`, `Sha1header`, `Sha256header`, `Sourcesigmd5` — all derived from the embedded path.
+- `strings rpm | grep _sourcedir-path` shows the captured `%install` script with absolute paths.
 
 **What this means in practice:**
 

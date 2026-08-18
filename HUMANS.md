@@ -36,8 +36,8 @@ Equivalent `make` targets exist via `make run-vm`, `make stop-vm`, `make destroy
  `../vm.sh` actions when you want the full local stack.
 
 - `up` defaults to a **fresh** `output/<variant>/run/` state. Set `VM_REUSE_STATE=1`
-  (or pass `--reuse-state`) only when you intentionally want to keep the prior
-  overlay and firmware vars.
+  (or pass --reuse-state to `../vm.sh`) only when you intentionally want to keep
+  the prior overlay and firmware vars.
 - For the default stack, `up` boots `bastion-core` and `bastion-edge`, enrolls
   the TheatreManager into Core, creates or reuses a Theatre at `/workspace`,
   captures the regenerated Core bootstrap identity into
@@ -94,8 +94,8 @@ Full spec: meta-repo `specs/active/adcon-runtime-vm-fedbuild-migration/spec.md`.
 
 ## What First Boot Installs
 
-- **RPM packages** — declared in [`blueprint.toml`](blueprint.toml) (`packages = [...]`)
-- **Brew formulae** — listed in [`bastion-vm-firstboot/SOURCES/Brewfile`](bastion-vm-firstboot/SOURCES/Brewfile); consumed by `brew bundle` on first boot
+- **RPM packages** — declared in [`variants/devbox/blueprint.toml`](variants/devbox/blueprint.toml) (`packages = [...]`)
+- **Brew formulae** — listed in [`variants/devbox/bastion-vm-firstboot/SOURCES/Brewfile`](variants/devbox/bastion-vm-firstboot/SOURCES/Brewfile); consumed by `brew bundle` on first boot
 - **npm globals** — `@anthropic-ai/claude-code`, `@google/gemini-cli` (hardcoded in `firstboot.sh` — no signed RPM source)
 
 Progress: `journalctl -u bastion-vm-firstboot -f` on the VM.
@@ -115,20 +115,21 @@ After intentional size or performance changes, promote the new baselines so CI d
 
 ```bash
 make image            # build fresh image
-make bless-size       # promote image bytes → tests/size.baseline
+make bless-size       # promote image bytes → variants/<variant>/tests/size.baseline
 make smoke            # confirm firstboot passes; captures boot timing
-make baseline-record  # append build_secs, image_bytes, firstboot_secs, secondboot_secs to tests/baselines.csv
+make baseline-record  # append build_secs, image_bytes, firstboot_secs, secondboot_secs to variants/<variant>/tests/baselines.csv
 ```
 
-Run all four after any batch of changes that touches packages, blueprint, or firstboot logic. Commit `tests/size.baseline` and `tests/baselines.csv` together so the baselines travel with the code.
+Run all four after any batch of changes that touches packages, blueprint, or firstboot logic. Commit `variants/<variant>/tests/size.baseline` and `variants/<variant>/tests/baselines.csv` together so the baselines travel with the code.
 
 **When a regression fires:**
+
 - `make check-size` fails → image grew past budget. Investigate with `make diff-packages`. Trim packages or run `make bless-size` if the growth is intentional (document why in the commit message).
-- `make smoke` boot-time regression → `tests/baselines.csv` shows firstboot or secondboot time exceeded threshold. Check `journalctl -u bastion-vm-firstboot` inside the VM for slow steps.
+- `make smoke` boot-time regression → `variants/<variant>/tests/baselines.csv` shows firstboot or secondboot time exceeded threshold. Check `journalctl -u bastion-vm-firstboot` inside the VM for slow steps.
 
 ## Boot-Time Regression Tracking
 
-`tests/baselines.csv` records per-commit performance baselines with these columns:
+`variants/<variant>/tests/baselines.csv` records per-commit performance baselines with these columns:
 
 ```
 commit,build_secs,image_bytes,firstboot_secs,secondboot_secs
@@ -139,9 +140,9 @@ commit,build_secs,image_bytes,firstboot_secs,secondboot_secs
 **What each column means:**
 
 | Column | What it measures | Notes |
-|--------|-----------------|-------|
+| -------- | ----------------- | ------- |
 | `build_secs` | Wall time for `make image` | Varies with host; useful for trend, not absolute comparison |
-| `image_bytes` | Compressed `.raw.zst` size | Also tracked by `tests/size.baseline`; redundant for convenience |
+| `image_bytes` | Compressed `.raw.zst` size | Also tracked by the variant size baseline; redundant for convenience |
 | `firstboot_secs` | Time from SSH-up to firstboot `done` sentinel | Dominated by `brew bundle` (20+ min expected) |
 | `secondboot_secs` | Time from SSH-up to shell-ready on second boot | Firstboot already done; measures baseline startup |
 

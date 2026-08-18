@@ -5,11 +5,12 @@ Reproducible Fedora 43 VM image builder. One pipeline; multiple variants for dis
 ## Variants
 
 | Variant | Purpose | Built by |
-|---------|---------|----------|
+| --------- | --------- | ---------- |
 | `devbox` | Bastion Agent (Claude Code, Gemini CLI) sandbox — Homebrew + dev toolchain | `make` (default) |
 | `bastion-edge` | Field-deployable image with `bastion-theatre-manager` daemon pre-enabled (Fedora 43 minimal, no Homebrew, no dev tools) | `make VARIANT=bastion-edge image` |
 
 Each variant produces:
+
 - A small **firstboot RPM** (systemd oneshot for first-boot bootstrap)
 - A bootable **Fedora 43 image** (`.raw.zst`) built via `image-builder`
 
@@ -57,9 +58,9 @@ when you want the full stack.
 ## Documentation
 
 | Doc | Audience |
-|-----|----------|
+| ----- | ---------- |
 | **[HUMANS.md](HUMANS.md)** | Quick start, release flow, what first-boot installs |
-| **[AGENTS.md](AGENTS.md)** | LLM reference: commands, architecture, blueprint format, gotchas, **reproducibility scope (BDA)** |
+| **[AGENTS.md](AGENTS.md)** | LLM reference: commands, architecture, blueprint format, gotchas, **reproducibility scope** |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | PR checklist, file-change map, commit style |
 | **[CHANGELOG.md](CHANGELOG.md)** | Auto-generated from Conventional Commits (`make changelog`) |
 | **[SECURITY.md](SECURITY.md)** | Vulnerability reporting |
